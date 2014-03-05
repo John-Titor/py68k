@@ -3,10 +3,11 @@
 # A M68K emulator for development purposes
 #
 
-import os, argparse, subprocess
+import os, argparse, subprocess, time
 from musashi.m68k import (
 	cpu_init,
 	disassemble,
+	end_timeslice,
 	execute,
 	get_reg,
 	mem_init,
@@ -39,6 +40,7 @@ from musashi.m68k import (
 	M68K_REG_A6,
 	M68K_REG_A7,
 	M68K_REG_PC,
+	M68K_REG_PPC,
 	M68K_REG_SR,
 	M68K_REG_SP
 )
@@ -77,31 +79,28 @@ def trace_nonl(msg):
 	global trace_file
 	trace_file.write(msg)
 
-def xlineinfo(addr):
-	"""
-	Ask addr2line for information about an address
-	"""
-	global symbolicator, lineinfo_cache
+def lineinfo(addr):
+	global args, lineinfo_cache
 
 	if addr in lineinfo_cache:
-		return lineinfo[addr]
-
-	symbolicator.stdin.write('{:#x}\n'.format(addr))
-	info = symbolicator.stdout.readline()
-
-	lineinfo_cache[addr] = info
-	return info
-
-def lineinfo(addr):
-	global args
+		return lineinfo_cache[addr]
 
 	symb = subprocess.Popen([args.addr2line, '-apfiC', '-e', args.image, '{:#x}'.format(addr)], stdout=subprocess.PIPE)
 	output, err = symb.communicate()
 
+	lineinfo_cache[addr] = output
 	return output
 
 def invalid(mode, width, addr):
-	trace('INVALID: {}({}): {:#10x}'.format(chr(mode), width, addr))
+	if chr(mode) == 'W':
+		cause = 'write to'
+	else:
+		cause = 'read from'
+
+	trace('BUS ERROR:     {:#10x}: {} invalid memory'.format(addr, cause))
+	trace('               {}'.format(lineinfo(get_reg(M68K_REG_PPC))))
+
+	end_timeslice()
 
 
 def trace_memory(mode, width, addr, value):
@@ -140,9 +139,9 @@ def trace_instruction():
 
 	trace('EXECUTE:       {:#10x}: {:30}    {}'.format(pc, dis, info))
 
-
 def trace_reset():
-	trace('RESET')
+	# normally going to exit here...
+	end_timeslice()
 
 
 def trace_jump(new_pc):
@@ -226,25 +225,6 @@ def init_tracing():
 	set_pc_changed_callback(trace_jump)
 
 
-def init_symbolicator():
-	"""
-	Kick off addr2line so that we can look up branch targets
-	"""
-	global args, symbolicator, lineinfo_cache
-
-	lineinfo_cache = {}
-
-	symbolicator = subprocess.Popen([args.addr2line, '-fpC', '-e', args.image, '@-'],
-					shell=False,
-					bufsize=1,
-					stdin=subprocess.PIPE,
-					stdout=subprocess.PIPE,
-					stderr=subprocess.STDOUT)
-	if symbolicator is None:
-		raise RuntimeError('failed to launch {}'.format(args.addr2line))
-	if symbolicator.poll() is not None:
-		raise RuntimeError('{} exited before being used'.format(args.addr2line))
-
 # Parse commandline arguments
 parser = argparse.ArgumentParser(description='m68k emulator')
 parser.add_argument('--memory-size',
@@ -266,8 +246,8 @@ args = parser.parse_args()
 # init image file
 init_elf()
 
-# start the symbolicator
-#init_symbolicator()
+# init the symbol cache
+lineinfo_cache = dict()
 
 # cpu initialisation
 init_cpu()
