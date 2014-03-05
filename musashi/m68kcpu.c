@@ -409,6 +409,7 @@ static void default_instr_hook_callback(void)
 {
 }
 
+
 #if M68K_EMULATE_ADDRESS_ERROR
 	#include <setjmp.h>
 	jmp_buf m68ki_aerr_trap;

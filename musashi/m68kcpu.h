@@ -362,6 +362,8 @@
 #define CALLBACK_SET_FC      m68ki_cpu.set_fc_callback
 #define CALLBACK_INSTR_HOOK  m68ki_cpu.instr_hook_callback
 
+
+
 /* ----------------------------- Configuration ---------------------------- */
 
 /* These defines are dependant on the configuration defines in m68kconf.h */
@@ -552,6 +554,8 @@
 	#define M68K_DO_LOG(A)
 	#define M68K_DO_LOG_EMU(A)
 #endif
+
+
 
 /* -------------------------- EA / Operand Access ------------------------- */
 

@@ -10,6 +10,17 @@
 #include "m68k.h"
 #include <stdint.h>
 
+/* ------ Defines ----- */
+
+/*
+ * Simulate memory decode on 64K boundaries.
+ */
+#define MEM_MAX_ADDRESS		(1U << 24)
+#define MEM_PAGE_SIZE		(1U << 16)
+#define MEM_NUM_PAGES		(MEM_MAX_ADDRESS / MEM_PAGE_SIZE)
+
+#define MEM_PAGE(_addr)		(_addr / MEM_PAGE_SIZE)
+
 /* ------ Types ----- */
 typedef unsigned int uint;
 
@@ -38,7 +49,8 @@ extern int  mem_is_end(void);
 extern void mem_set_trace_mode(int on);
 extern void mem_set_trace_func(trace_func_t func);
 
-extern void mem_set_handler(uint page_addr, mem_handler_t handler);
+extern void mem_set_device(uint addr);
+extern void mem_set_deice_func(trace_func_t func);
 
 extern uint mem_ram_read(int mode, uint addr);
 extern void mem_ram_write(int mode, uint addr, uint value);

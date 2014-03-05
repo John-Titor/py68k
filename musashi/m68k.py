@@ -129,6 +129,9 @@ mem_free_func = lib.mem_free
 mem_set_trace_mode_func = lib.mem_set_trace_mode
 mem_set_trace_mode_func.argtypes = [c_int]
 
+mem_set_device_func = lib.mem_set_device
+mem_set_device_func.argtypes = [c_uint]
+
 mem_is_end_func = lib.mem_is_end
 mem_is_end_func.restype = c_int
 
@@ -225,6 +228,14 @@ def mem_set_trace_func(func):
   trace_func_callback = trace_func_type(func)
   lib.mem_set_trace_func(trace_func_callback)
   
+def mem_set_device(addr):
+  mem_set_device_func(addr)
+
+def mem_set_device_func(func):
+  global device_func_callback
+  device_func_callback = trace_func_type(func)
+  lib.mem_set_device_func(device_func_callback)
+
 def mem_is_end():
   return mem_is_end_func()
   

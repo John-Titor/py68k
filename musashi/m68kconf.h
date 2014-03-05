@@ -51,7 +51,6 @@
 /* If you're compiling this for MAME, only change M68K_COMPILE_FOR_MAME
  * to OPT_ON and use m68kmame.h to configure the 68k core.
  */
-/* CV Patch */
 #ifndef M68K_COMPILE_FOR_MAME
 #define M68K_COMPILE_FOR_MAME      OPT_OFF
 #endif /* M68K_COMPILE_FOR_MAME */
@@ -107,7 +106,6 @@
 /* If ON, CPU will call the output reset callback when it encounters a reset
  * instruction.
  */
-/* CV Patch */
 #define M68K_EMULATE_RESET          OPT_ON
 #define M68K_RESET_CALLBACK()       your_reset_handler_function()
 
@@ -133,7 +131,6 @@
 /* If ON, CPU will call the instruction hook callback before every
  * instruction.
  */
-/* CV Patch */
 #define M68K_INSTRUCTION_HOOK       OPT_ON
 #define M68K_INSTRUCTION_CALLBACK() your_instruction_hook_function()
 
@@ -156,6 +153,7 @@
 #define M68K_LOG_ENABLE             OPT_OFF
 #define M68K_LOG_1010_1111          OPT_OFF
 #define M68K_LOG_FILEHANDLE         some_file_handle
+
 
 /* ----------------------------- COMPATIBILITY ---------------------------- */
 

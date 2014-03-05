@@ -10,18 +10,17 @@
 
 #include "mem.h"
 
-#define NUM_PAGES   256
-
 /* ----- Data ----- */
 static uint8_t *ram_data;
 static uint     ram_size;
 static uint     ram_pages;
 
-static mem_handler_t  mem_handler[NUM_PAGES];
+static mem_handler_t  mem_handler[MEM_NUM_PAGES];
 
 static invalid_func_t invalid_func;
 static int mem_trace = 0;
 static trace_func_t trace_func;
+static trace_func_t device_func;
 static int is_end = 0;
 
 /* ----- Default Funcs ----- */
@@ -33,6 +32,12 @@ static void default_invalid(int mode, int width, uint addr)
 static int default_trace(int mode, int width, uint addr, uint val)
 {
   printf("%c(%d): %06x: %x\n",(char)mode,width,addr,val);
+  return 0;
+}
+
+static int default_device(int mode, int width, uint addr, uint val)
+{
+  printf("NO DEVICE: %c(%d): %06x: %x\n",(char)mode,width,addr,val);
   return 0;
 }
 
@@ -61,7 +66,7 @@ static mem_handler_t mem_end_handler = {
 static void set_all_to_end(void)
 {
   int i;
-  for(i=0;i<NUM_PAGES;i++) {
+  for(i=0;i<MEM_NUM_PAGES;i++) {
     mem_handler[i] = mem_end_handler;
   }
   is_end = 1;
@@ -151,11 +156,47 @@ static mem_handler_t mem_ram_handler = {
   w8_ram, w16_ram, w32_ram
 };
 
+/* ----- device access ----- */
+static uint r8_device(uint addr)
+{
+  return device_func('R', 0, addr, 0);
+}
+
+static uint r16_device(uint addr)
+{
+  return device_func('R', 1, addr, 0);
+}
+
+static uint r32_device(uint addr)
+{
+  return device_func('R', 2, addr, 0);
+}
+
+static void w8_device(uint addr, uint val)
+{
+  device_func('W', 0, addr, 0);
+}
+
+static void w16_device(uint addr, uint val)
+{
+  device_func('W', 1, addr, 0);
+}
+
+static void w32_device(uint addr, uint val)
+{
+  device_func('W', 2, addr, 0);
+}
+
+static mem_handler_t mem_device_handler = {
+  r8_device, r16_device, r32_device,
+  w8_device, w16_device, w32_device
+};
+
 /* ----- Musashi Interface ----- */
 
 unsigned int  m68k_read_memory_8(unsigned int address)
 {
-  uint page = address >> 16;
+  uint page = MEM_PAGE(address);
   uint val = mem_handler[page].r8(address);
   if(mem_trace) {
     if(trace_func('R',0,address,val)) {
@@ -172,7 +213,7 @@ unsigned int  m68k_read_pcrelative_8(unsigned int address)
 
 unsigned int  m68k_read_memory_16(unsigned int address)
 {
-  uint page = address >> 16;
+  uint page = MEM_PAGE(address);
   uint val = mem_handler[page].r16(address);
   if(mem_trace) {
     if(trace_func('R',1,address,val)) {
@@ -184,7 +225,7 @@ unsigned int  m68k_read_memory_16(unsigned int address)
 
 unsigned int  m68k_read_immediate_16(unsigned int address)
 {
-  uint page = address >> 16;
+  uint page = MEM_PAGE(address);
   uint val = mem_handler[page].r16(address);
   if(mem_trace) {
     if(trace_func('I',1,address,val)) {
@@ -201,7 +242,7 @@ unsigned int  m68k_read_pcrelative_16(unsigned int address)
 
 unsigned int  m68k_read_memory_32(unsigned int address)
 {
-  uint page = address >> 16;
+  uint page = MEM_PAGE(address);
   uint val = mem_handler[page].r32(address);
   if(mem_trace) {
     if(trace_func('R',2,address,val)) {
@@ -213,7 +254,7 @@ unsigned int  m68k_read_memory_32(unsigned int address)
 
 unsigned int  m68k_read_immediate_32(unsigned int address)
 {
-  uint page = address >> 16;
+  uint page = MEM_PAGE(address);
   uint val = mem_handler[page].r32(address);
   if(mem_trace) {
     if(trace_func('I',2,address,val)) {
@@ -230,7 +271,7 @@ unsigned int  m68k_read_pcrelative_32(unsigned int address)
 
 void m68k_write_memory_8(unsigned int address, unsigned int value)
 {
-  uint page = address >> 16;
+  uint page = MEM_PAGE(address);
   mem_handler[page].w8(address, value);
   if(mem_trace) {
     if(trace_func('W',0,address,value)) {
@@ -241,7 +282,7 @@ void m68k_write_memory_8(unsigned int address, unsigned int value)
 
 void m68k_write_memory_16(unsigned int address, unsigned int value)
 {
-  uint page = address >> 16;
+  uint page = MEM_PAGE(address);
   mem_handler[page].w16(address, value);
   if(mem_trace) {
     if(trace_func('W',1,address,value)) {
@@ -252,7 +293,7 @@ void m68k_write_memory_16(unsigned int address, unsigned int value)
 
 void m68k_write_memory_32(unsigned int address, unsigned int value)
 {
-  uint page = address >> 16;
+  uint page = MEM_PAGE(address);
   mem_handler[page].w32(address, value);
   if(mem_trace) {
     if(trace_func('W',2,address,value)) {
@@ -265,14 +306,14 @@ void m68k_write_memory_32(unsigned int address, unsigned int value)
 
 unsigned int m68k_read_disassembler_16 (unsigned int address)
 {
-  uint page = address >> 16;
+  uint page = MEM_PAGE(address);
   uint val = mem_handler[page].r16(address);
   return val;
 }
 
 unsigned int m68k_read_disassembler_32 (unsigned int address)
 {
-  uint page = address >> 16;
+  uint page = MEM_PAGE(address);
   uint val = mem_handler[page].r32(address);
   return val;
 }
@@ -286,7 +327,7 @@ int mem_init(uint ram_size_kib)
   ram_pages = ram_size_kib / 64;
   ram_data = (uint8_t *)malloc(ram_size);
 
-  for(i=0;i<NUM_PAGES;i++) {
+  for(i=0;i<MEM_NUM_PAGES;i++) {
     if(i < ram_pages) {
       mem_handler[i] = mem_ram_handler;
     } else {
@@ -296,6 +337,7 @@ int mem_init(uint ram_size_kib)
   
   trace_func = default_trace;
   invalid_func = default_invalid;
+  device_func = default_device;
 
   return (ram_data != NULL);
 }
@@ -324,6 +366,16 @@ void mem_set_trace_func(trace_func_t func)
 int mem_is_end(void)
 {
   return is_end;
+}
+
+void mem_set_device(uint addr)
+{
+  mem_handler[MEM_PAGE(addr)] = mem_device_handler;
+}
+
+void mem_set_device_func(trace_func_t func)
+{
+  device_func = func;
 }
 
 /* ----- RAM Access ----- */
