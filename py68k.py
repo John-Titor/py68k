@@ -3,7 +3,8 @@
 # A M68K emulator for development purposes
 #
 
-import os, argparse, subprocess, time
+import os, argparse, subprocess
+from bisect import bisect
 import device
 from musashi.m68k import (
 	cpu_init,
@@ -53,6 +54,8 @@ from musashi.m68k import (
 	M68K_REG_SP
 )
 from elftools.elf.elffile import ELFFile
+from elftools.elf.sections import SymbolTableSection
+from elftools.elf.constants import SH_FLAGS
 from elftools.elf.descriptions import (
 	describe_e_machine,
 	describe_e_type
@@ -67,11 +70,14 @@ class image(object):
 		"""
 		Read the ELF headers and prepare to load the executable
 		"""
-		global args
 
 		self._emu = emu
 		self._lineinfo_cache = dict()
-		self._addr2line = args.addr2line
+		self._symbol_cache = dict()
+		self._addr2line = self._findtool('m68k-elf-addr2line')
+
+		if self._addr2line is None:
+			raise RuntimeError("unable to find m68k-elf-addr2line and/or m68k-elf-readelf, check your PATH")
 
 		elf_fd = open(image_filename, "rb")
 		self._elf = ELFFile(elf_fd)
@@ -83,31 +89,53 @@ class image(object):
 		if self._elf.num_segments() == 0:
 			raise RuntimeError('no segments in ELF file')
 
+		# iterate sections
+		for section in self._elf.iter_sections():
 
-		# iterate the memory segments in the file
-		for segment in self._elf.iter_segments():
-			p_vaddr = segment['p_vaddr']
-			p_memsize = segment['p_memsz']
-			p_end = p_vaddr + p_memsize
+			# does this section need to be loaded?
+			if section['sh_flags'] & SH_FLAGS.SHF_ALLOC:
+				p_addr = section['sh_addr']	
+				p_size = section['sh_size']
+				self._emu.trace('LOAD', info='{} {:#x}/{:#x} '.format(section.name, p_addr, p_size))
 
-			# print some info about what we are loading
-			self._emu.trace('{:#x}/{:#x} '.format(p_vaddr, p_memsize))
-			for section in self._elf.iter_sections():
-				if segment.section_in_segment(section):
-					self._emu.trace('    {:16}: {:#x}/{:#x}'.format(section.name,
-											section['sh_addr'],
-											section['sh_size']))
+				# XXX should really be a call on the emulator
+				mem_ram_write_block(p_addr, p_size, section.data())
 
-			# XXX should really be a call on the emulator
-			mem_ram_write_block(p_vaddr, p_memsize, segment.data())
+			# does it contain symbols?
+			if isinstance(section, SymbolTableSection):
+				self._cache_symbols(section)
 
+		self._symbol_index = sorted(self._symbol_cache.keys())
+
+	def _cache_symbols(self, section):
+
+		for nsym, symbol in enumerate(section.iter_symbols()):
+
+			# only interested in data and function symbols
+			s_type = symbol['st_info']['type']
+			if s_type != 'STT_OBJECT' and s_type != 'STT_FUNC':
+				continue
+
+			s_addr = symbol['st_value']
+			s_size = symbol['st_size']
+			s_name = str(symbol.name)
+
+			self._symbol_cache[s_addr] = { 'name': s_name, 'size' : s_size }
+
+	def _findtool(self, tool):
+		for path in os.environ['PATH'].split(os.pathsep):
+			path = path.strip('"')
+			candidate = os.path.join(path, tool)
+			if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+				return candidate
+		return None
 
 	def lineinfo(self, addr):
 		if addr in self._lineinfo_cache:
 			return self._lineinfo_cache[addr]
 
 		symb = subprocess.Popen([self._addr2line, 
-					 '-apfiC',
+					 '-pfiC',
 					 '-e',
 					 args.image,
 					 '{:#x}'.format(addr)],
@@ -116,6 +144,26 @@ class image(object):
 
 		self._lineinfo_cache[addr] = output
 		return output
+
+	def symname(self, addr):
+		if addr in self._symbol_cache:
+			return self._symbol_cache[addr]['name']
+
+		# look for the next highest symbol address
+		pos = bisect(self._symbol_index, addr)
+		if pos == 0:
+			# address lower than anything we know
+			return ''
+		insym = self._symbol_index[pos - 1]
+
+		# check that the value is within the symbol
+		delta = addr - insym
+		if self._symbol_cache[insym]['size'] <= delta:
+			return ''
+
+		# it is, construct a name + offset string 
+		return '{}+{:#x}'.format(self._symbol_cache[insym]['name'], delta)
+
 
 class emulator(object):
 
@@ -183,13 +231,20 @@ class emulator(object):
 		"""
 		dev(offset)
 
-	def trace(self, msg):
-		global emu
-		self._trace_file.write(msg + '\n')
+	def trace(self, action, address=None, info=''):
 
-	def trace_nonl(self, msg):
-		global emu
-		self._trace_file.write(msg)
+		if address is not None:
+			symname = self._image.symname(address)
+			if symname != '':
+				afield = '{} / {:#08x}'.format(symname, address)
+			else:
+				afield = '{:#08x}'.format(address)
+		else:
+			afield = ''
+
+		msg = '{:>10}: {:>40} : {}'.format(action, afield, info.strip())
+
+		self._trace_file.write(msg + '\n')
 
 	def buserror(self, mode, width, addr):
 		"""
@@ -201,8 +256,8 @@ class emulator(object):
 		else:
 			cause = 'read from'
 	
-		self.trace('BUS ERROR:     {:#10x}: {} invalid memory'.format(addr, cause))
-		self.trace('               {}'.format(self._image.lineinfo(get_reg(M68K_REG_PPC))))
+		self.trace('BUS ERROR', addr, '{} invalid memory'.format(cause))
+		self.trace('BUS ERROR', addr, self._image.lineinfo(get_reg(M68K_REG_PPC)))
 	
 		end_timeslice()
 
@@ -215,17 +270,19 @@ class emulator(object):
 		if kind == 'I':
 			return 0
 		if kind == 'W':
-			direction = "WRITE:"
+			direction = "WRITE"
 		else:
-			direction = "READ: "
+			direction = "READ"
 	
 		if width == 0:
-			self.trace('{}         {:#10x}: {:#04x}'.format(direction, addr, value))
+			info = '{:#04x}'.format(value)
 		elif width == 1:
-			self.trace('{}         {:#10x}: {:#06x}'.format(direction, addr, value))
+			info = '{:#06x}'.format(value)
 		elif width == 2:
-			self.trace('{}         {:#10x}: {:#010x}'.format(direction, addr, value))
+			info = '{:#010x}'.format(value)
 	
+		self.trace(direction, addr, info)
+
 		return 0
 	
 	def trace_instruction(self):
@@ -239,7 +296,7 @@ class emulator(object):
 			if dis.find(reg) is not -1:
 				info += ' {}={:#x}'.format(reg, get_reg(self.registers[reg]))
 	
-		self.trace('EXECUTE:       {:#10x}: {:30}    {}'.format(pc, dis, info))
+		self.trace('EXECUTE', pc, '{:30} {}'.format(dis, info))
 
 	def trace_reset(self):
 		# normally going to exit here...
@@ -250,7 +307,7 @@ class emulator(object):
 		"""
 		Cut a jump trace entry, called when the PC changes significantly
 		"""
-		self.trace_nonl('\nJUMP:          {}'.format(self._image.lineinfo(new_pc)))
+		self.trace('JUMP', new_pc, self._image.lineinfo(new_pc))
 
 
 
@@ -264,10 +321,6 @@ parser.add_argument('--trace-file',
 		    type=str,
 		    default='trace.out',
 		    help='trace output file')
-parser.add_argument('--addr2line',
-		    type=str,
-		    default='m68k-elf-addr2line',
-		    help='path to invoke the addr2line utility')
 parser.add_argument('image',
 		    help='ELF executable to load')
 args = parser.parse_args()
