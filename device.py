@@ -32,13 +32,16 @@ class device(object):
 				raise RuntimeError('register at {} already assigned'.format(addr))
 			device._register_to_device[addr] = self
 
+	def trace(self, action, info=''):
+		device._emu.trace('DEVICE', info='{}: {} {}'.format(self._name, action, info))
+
 class root_device(device):
 
 	def __init__(self, emu, base):
 		"""
 		Initialise the root device
 		"""
-		self._emu = emu
+		device._emu = emu
 		device._root_device = self
 		device._device_base = base
 		mem_set_device(device._device_base)
@@ -47,7 +50,7 @@ class root_device(device):
 	def access(self, mode, width, addr, value):
 		# look for a device
 		if addr not in device._register_to_device:
-			self._emu.buserror(mode, width, addr)
+			device._emu.buserror(mode, width, addr)
 			return 0
 		else:
 			# dispatch to device emulator
@@ -69,9 +72,10 @@ class uart(device):
 
 	def __init__(self, base):
 		self._base = base
-		self.rx_ready = False
-		self.tx_ready = True
-		self.rx_data = 0
+		self._name = "uart"
+		self._rx_ready = False
+		self._tx_ready = True
+		self._rx_data = 0
 
 		self.map_registers(base, self._registers)
 
@@ -80,16 +84,16 @@ class uart(device):
 		if mode == device.MODE_READ:
 			if addr == self._registers['SR']:
 				value = 0
-				if self.rx_ready:
+				if self._rx_ready:
 					value |= SR_RXRDY
-				if self.tx_ready:
+				if self._tx_ready:
 					value |= SR_TXRDY
 			elif addr == self._registers['DR']:
-				value = self.rx_data
-
+				value = self._rx_data
 
 		if mode == device.MODE_WRITE:
 			if addr == self._registers['DR']:
+				self.trace('write', '{}'.format(chr(value).__repr__()))
 				# XXX this is a bit hokey...
 				sys.stdout.write(chr(value))
 				sys.stdout.flush()

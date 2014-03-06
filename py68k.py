@@ -13,6 +13,7 @@ from musashi.m68k import (
 	execute,
 	get_reg,
 	mem_init,
+	mem_is_end,
 	mem_ram_write_block,
 	mem_set_invalid_func,
 	mem_set_trace_func,
@@ -134,8 +135,11 @@ class image(object):
 		if addr in self._lineinfo_cache:
 			return self._lineinfo_cache[addr]
 
+		# -i gives extra information about inlined functions, but it puts
+		# newlines in the result that mess up the log...
+
 		symb = subprocess.Popen([self._addr2line, 
-					 '-pfiC',
+					 '-pfC',
 					 '-e',
 					 args.image,
 					 '{:#x}'.format(addr)],
@@ -223,7 +227,12 @@ class emulator(object):
 		pulse_reset()
 
 	def run(self):
-		execute(100000)
+		while not mem_is_end():
+			execute(100)
+
+	def finish(self):
+		self._trace_file.flush()
+		self._trace_file.close()
 
 	def add_device(self, dev, offset):
 		"""
@@ -335,3 +344,5 @@ emu.add_device(device.uart, 0)
 
 # run some instructions
 emu.run()
+
+emu.finish()
