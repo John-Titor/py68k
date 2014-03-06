@@ -91,12 +91,12 @@ class image(object):
 			p_end = p_vaddr + p_memsize
 
 			# print some info about what we are loading
-			print '{:#x}/{:#x} '.format(p_vaddr, p_memsize)
+			self._emu.trace('{:#x}/{:#x} '.format(p_vaddr, p_memsize))
 			for section in self._elf.iter_sections():
 				if segment.section_in_segment(section):
-					print '    {:16}: {:#x}/{:#x}'.format(section.name,
-									      section['sh_addr'],
-									      section['sh_size'])
+					self._emu.trace('    {:16}: {:#x}/{:#x}'.format(section.name,
+											section['sh_addr'],
+											section['sh_size']))
 
 			# XXX should really be a call on the emulator
 			mem_ram_write_block(p_vaddr, p_memsize, segment.data())
@@ -116,8 +116,6 @@ class image(object):
 
 		self._lineinfo_cache[addr] = output
 		return output
-
-
 
 class emulator(object):
 
@@ -142,6 +140,8 @@ class emulator(object):
 		'SR' : M68K_REG_SR,
 		'SP' : M68K_REG_SP}
 
+	device_base = 0xff0000
+
 	def __init__(self, image_filename, memory_size, trace_filename):
 
 		# initialise the trace file
@@ -160,13 +160,13 @@ class emulator(object):
 		set_reset_instr_callback(self.trace_reset)
 		set_pc_changed_callback(self.trace_jump)
 		mem_set_trace_func(self.trace_memory)
-		mem_set_invalid_func(self.invalid)
+		mem_set_invalid_func(self.buserror)
 
 		# enable memory tracing
 		mem_set_trace_mode(1)
 
 		# configure device space
-		self._root_device = device.root_device(self, 0xff0000)
+		self._root_device = device.root_device(self, self.device_base)
 
 		# load the executable image
 		self._image = image(self, image_filename)
@@ -178,6 +178,9 @@ class emulator(object):
 		execute(100000)
 
 	def add_device(self, dev, offset):
+		"""
+		Attach a device to the emulator at the given offset in device space
+		"""
 		dev(offset)
 
 	def trace(self, msg):
@@ -188,7 +191,7 @@ class emulator(object):
 		global emu
 		self._trace_file.write(msg)
 
-	def invalid(self, mode, width, addr):
+	def buserror(self, mode, width, addr):
 		"""
 		Handle an invalid memory access
 		"""
@@ -278,5 +281,4 @@ emu = emulator(memory_size = args.memory_size,
 emu.add_device(device.uart, 0)
 
 # run some instructions
-print 'running'
 emu.run()

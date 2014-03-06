@@ -47,7 +47,7 @@ class root_device(device):
 	def access(self, mode, width, addr, value):
 		# look for a device
 		if addr not in device._register_to_device:
-			self._emu.invalid(mode, width, addr)
+			self._emu.buserror(mode, width, addr)
 			return 0
 		else:
 			# dispatch to device emulator
