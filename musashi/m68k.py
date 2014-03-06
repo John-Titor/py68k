@@ -231,10 +231,10 @@ def mem_set_trace_func(func):
 def mem_set_device(addr):
   mem_set_device_func(addr)
 
-def mem_set_device_func(func):
+def mem_set_device_handler(func):
   global device_func_callback
   device_func_callback = trace_func_type(func)
-  lib.mem_set_device_func(device_func_callback)
+  lib.mem_set_device_handler(device_func_callback)
 
 def mem_is_end():
   return mem_is_end_func()

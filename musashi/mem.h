@@ -50,7 +50,7 @@ extern void mem_set_trace_mode(int on);
 extern void mem_set_trace_func(trace_func_t func);
 
 extern void mem_set_device(uint addr);
-extern void mem_set_deice_func(trace_func_t func);
+extern void mem_set_device_handler(trace_func_t func);
 
 extern uint mem_ram_read(int mode, uint addr);
 extern void mem_ram_write(int mode, uint addr, uint value);

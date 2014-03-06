@@ -174,17 +174,17 @@ static uint r32_device(uint addr)
 
 static void w8_device(uint addr, uint val)
 {
-  device_func('W', 0, addr, 0);
+  device_func('W', 0, addr, val);
 }
 
 static void w16_device(uint addr, uint val)
 {
-  device_func('W', 1, addr, 0);
+  device_func('W', 1, addr, val);
 }
 
 static void w32_device(uint addr, uint val)
 {
-  device_func('W', 2, addr, 0);
+  device_func('W', 2, addr, val);
 }
 
 static mem_handler_t mem_device_handler = {
@@ -373,7 +373,7 @@ void mem_set_device(uint addr)
   mem_handler[MEM_PAGE(addr)] = mem_device_handler;
 }
 
-void mem_set_device_func(trace_func_t func)
+void mem_set_device_handler(trace_func_t func)
 {
   device_func = func;
 }
