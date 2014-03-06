@@ -234,7 +234,7 @@ class emulator(object):
 
 	def run(self):
 		while not mem_is_end():
-			self._root_device.tick(self._elapsed_cycles)
+			self._root_device.tick(self._elapsed_cycles / self.cpu_frequency)
 			self._elapsed_cycles += execute(self._quantum)
 
 	def finish(self):
