@@ -236,10 +236,12 @@ void m68k_set_reset_instr_callback(void  (*callback)(void));
 /* Set the callback for informing of a large PC change.
  * You must enable M68K_MONITOR_PC in m68kconf.h.
  * The CPU calls this callback with the new PC value every time the PC changes
- * by a large value (currently set for changes by longwords).
+ * by a large value (currently set for changes by longwords). If the change
+ * is due to taking an exception, the vector argument will be the non-zero
+ * vector number being used.
  * Default behavior: do nothing.
  */
-void m68k_set_pc_changed_callback(void  (*callback)(unsigned int new_pc));
+void m68k_set_pc_changed_callback(void  (*callback)(unsigned int new_pc, unsigned int vector));
 
 
 /* Set the callback for CPU function code changes.

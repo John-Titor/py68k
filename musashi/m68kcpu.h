@@ -462,12 +462,12 @@
 
 #if M68K_MONITOR_PC
 	#if M68K_MONITOR_PC == OPT_SPECIFY_HANDLER
-		#define m68ki_pc_changed(A) M68K_SET_PC_CALLBACK(ADDRESS_68K(A))
+		#define m68ki_pc_changed(A, V) M68K_SET_PC_CALLBACK(ADDRESS_68K(A), V)
 	#else
-		#define m68ki_pc_changed(A) CALLBACK_PC_CHANGED(ADDRESS_68K(A))
+		#define m68ki_pc_changed(A, V) CALLBACK_PC_CHANGED(ADDRESS_68K(A), V)
 	#endif
 #else
-	#define m68ki_pc_changed(A)
+	#define m68ki_pc_changed(A, V)
 #endif /* M68K_MONITOR_PC */
 
 
@@ -841,7 +841,8 @@ typedef struct
 	int  (*int_ack_callback)(int int_line);           /* Interrupt Acknowledge */
 	void (*bkpt_ack_callback)(unsigned int data);     /* Breakpoint Acknowledge */
 	void (*reset_instr_callback)(void);               /* Called when a RESET instruction is encountered */
-	void (*pc_changed_callback)(unsigned int new_pc); /* Called when the PC changes by a large amount */
+	void (*pc_changed_callback)(unsigned int new_pc,
+				    unsigned int vector); /* Called when the PC changes by a large amount */
 	void (*set_fc_callback)(unsigned int new_fc);     /* Called when the CPU function code changes */
 	void (*instr_hook_callback)(void);                /* Called every instruction cycle prior to execution */
 
@@ -1341,14 +1342,14 @@ INLINE void m68ki_fake_pull_32(void)
 INLINE void m68ki_jump(uint new_pc)
 {
 	REG_PC = new_pc;
-	m68ki_pc_changed(REG_PC);
+	m68ki_pc_changed(REG_PC, 0);
 }
 
 INLINE void m68ki_jump_vector(uint vector)
 {
 	REG_PC = (vector<<2) + REG_VBR;
 	REG_PC = m68ki_read_data_32(REG_PC);
-	m68ki_pc_changed(REG_PC);
+	m68ki_pc_changed(REG_PC, vector);
 }
 
 
@@ -1370,7 +1371,7 @@ INLINE void m68ki_branch_16(uint offset)
 INLINE void m68ki_branch_32(uint offset)
 {
 	REG_PC += offset;
-	m68ki_pc_changed(REG_PC);
+	m68ki_pc_changed(REG_PC, 0);
 }
 
 

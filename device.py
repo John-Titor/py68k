@@ -35,6 +35,9 @@ class device(object):
 	def trace(self, action, info=''):
 		device._emu.trace('DEVICE', info='{}: {} {}'.format(self._name, action, info))
 
+	def tick(self, current_time):
+		return 0
+
 class root_device(device):
 
 	def __init__(self, emu, base):
@@ -45,9 +48,9 @@ class root_device(device):
 		device._root_device = self
 		device._device_base = base
 		mem_set_device(device._device_base)
-		mem_set_device_handler(self.access)
+		mem_set_device_handler(self._access)
 
-	def access(self, mode, width, addr, value):
+	def _access(self, mode, width, addr, value):
 		# look for a device
 		if addr not in device._register_to_device:
 			device._emu.buserror(mode, width, addr)
@@ -56,6 +59,18 @@ class root_device(device):
 			# dispatch to device emulator
 			dev_addr = addr - device._device_base
 			return device._register_to_device[addr].access(chr(mode), width, dev_addr, value)
+
+	def add_device(self, dev, offset):
+		new_dev = dev(offset)
+		device._devices.append(new_dev)
+
+	def tick(self, current_time):
+		deadline = 0
+		for dev in device._devices:
+			ret = dev.tick(current_time)
+			if ret > 0 and (deadline == 0 or ret < deadline):
+				deadline = ret
+		return deadline
 
 class uart(device):
 	"""

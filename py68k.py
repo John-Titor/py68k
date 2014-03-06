@@ -193,6 +193,7 @@ class emulator(object):
 		'SP' : M68K_REG_SP}
 
 	device_base = 0xff0000
+	cpu_frequency = 8
 
 	def __init__(self, image_filename, memory_size, trace_filename):
 
@@ -201,6 +202,11 @@ class emulator(object):
 
 		# allocate memory for the emulation
 		mem_init(memory_size)
+
+		# time
+		self._elapsed_cycles = 0
+		self._device_deadline = 0
+		self._quantum = self.cpu_frequency * 100
 
 		# intialise the CPU
 		self._cpu_type = M68K_CPU_TYPE_68000
@@ -228,7 +234,8 @@ class emulator(object):
 
 	def run(self):
 		while not mem_is_end():
-			execute(100)
+			self._root_device.tick(self._elapsed_cycles)
+			self._elapsed_cycles += execute(self._quantum)
 
 	def finish(self):
 		self._trace_file.flush()
@@ -238,7 +245,7 @@ class emulator(object):
 		"""
 		Attach a device to the emulator at the given offset in device space
 		"""
-		dev(offset)
+		self._root_device.add_device(dev, offset)
 
 	def trace(self, action, address=None, info=''):
 
@@ -312,11 +319,15 @@ class emulator(object):
 		end_timeslice()
 	
 
-	def trace_jump(self, new_pc):
+	def trace_jump(self, new_pc, vector):
 		"""
 		Cut a jump trace entry, called when the PC changes significantly
 		"""
-		self.trace('JUMP', new_pc, self._image.lineinfo(new_pc))
+		if vector == 0:
+			self.trace('JUMP', new_pc, self._image.lineinfo(new_pc))
+		else:
+			ppc = get_reg(M68K_REG_PPC)
+			self.trace('EXCEPTION', ppc, '{} in {}'.format(vector, self._image.lineinfo(new_pc)))
 
 
 

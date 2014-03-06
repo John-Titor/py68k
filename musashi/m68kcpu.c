@@ -391,10 +391,11 @@ static void default_reset_instr_callback(void)
 }
 
 /* Called when the program counter changed by a large value */
-static unsigned int default_pc_changed_callback_data;
-static void default_pc_changed_callback(unsigned int new_pc)
+static unsigned int default_pc_changed_callback_data[2];
+static void default_pc_changed_callback(unsigned int new_pc, unsigned int vector)
 {
-	default_pc_changed_callback_data = new_pc;
+	default_pc_changed_callback_data[0] = new_pc;
+	default_pc_changed_callback_data[1] = vector;
 }
 
 /* Called every time there's bus activity (read/write to/from memory */
@@ -547,7 +548,7 @@ void m68k_set_reset_instr_callback(void  (*callback)(void))
 	CALLBACK_RESET_INSTR = callback ? callback : default_reset_instr_callback;
 }
 
-void m68k_set_pc_changed_callback(void  (*callback)(unsigned int new_pc))
+void m68k_set_pc_changed_callback(void  (*callback)(unsigned int new_pc, unsigned int vector))
 {
 	CALLBACK_PC_CHANGED = callback ? callback : default_pc_changed_callback;
 }

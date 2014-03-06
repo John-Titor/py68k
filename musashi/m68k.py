@@ -83,7 +83,7 @@ lib = CDLL(lib_file)
 # define CPU function types for callbacks
 read_func_type = CFUNCTYPE(c_uint, c_uint)
 write_func_type = CFUNCTYPE(None, c_uint, c_uint)
-pc_changed_callback_func_type = CFUNCTYPE(None, c_uint)
+pc_changed_callback_func_type = CFUNCTYPE(None, c_uint, c_uint)
 reset_instr_callback_func_type = CFUNCTYPE(None)
 invalid_func_type = CFUNCTYPE(None, c_int, c_int, c_uint)
 trace_func_type = CFUNCTYPE(c_int, c_int, c_int, c_uint, c_uint)
@@ -260,7 +260,7 @@ if __name__ == "__main__":
   mem_set_trace_func(trace)
   mem_set_trace_mode(1)
   
-  def pc_changed(addr):
+  def pc_changed(addr, vector):
     print "pc %06x" % (addr)
     
   def reset_handler():
