@@ -31,7 +31,7 @@ static void default_invalid(int mode, int width, uint addr)
 
 static int default_trace(int mode, int width, uint addr, uint val)
 {
-  printf("%c(%d): %06x: %x\n",(char)mode,width,addr,val);
+//  printf("%c(%d): %06x: %x\n",(char)mode,width,addr,val);
   return 0;
 }
 

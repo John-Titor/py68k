@@ -260,7 +260,7 @@ if __name__ == "__main__":
   mem_set_trace_func(trace)
   mem_set_trace_mode(1)
   
-  def pc_changed(addr, vector):
+  def pc_changed(addr):
     print "pc %06x" % (addr)
     
   def reset_handler():

@@ -942,6 +942,7 @@ INLINE uint m68ki_pull_32(void);
 
 /* Program flow operations */
 INLINE void m68ki_jump(uint new_pc);
+INLINE void m68ki_jump_interrupt(uint new_pc, uint vector);
 INLINE void m68ki_jump_vector(uint vector);
 INLINE void m68ki_branch_8(uint offset);
 INLINE void m68ki_branch_16(uint offset);
@@ -1343,6 +1344,12 @@ INLINE void m68ki_jump(uint new_pc)
 {
 	REG_PC = new_pc;
 	m68ki_pc_changed(REG_PC, 0);
+}
+
+INLINE void m68ki_jump_interrupt(uint new_pc, uint vector)
+{
+	REG_PC = new_pc;
+	m68ki_pc_changed(REG_PC, vector);
 }
 
 INLINE void m68ki_jump_vector(uint vector)
@@ -1886,6 +1893,7 @@ m68k_read_memory_8(0x00ffff01);
 	USE_CYCLES(CYC_EXCEPTION[EXCEPTION_ADDRESS_ERROR] - CYC_INSTRUCTION[REG_IR]);
 }
 
+#include <stdio.h>
 
 /* Service an interrupt request and start exception processing */
 void m68ki_exception_interrupt(uint int_level)
@@ -1947,8 +1955,7 @@ void m68ki_exception_interrupt(uint int_level)
 		sr |= 0x2000; /* Same as SR in master stack frame except S is forced high */
 		m68ki_stack_frame_0001(REG_PC, sr, vector);
 	}
-
-	m68ki_jump(new_pc);
+	m68ki_jump_interrupt(new_pc, vector);
 
 	/* Defer cycle counting until later */
 	CPU_INT_CYCLES += CYC_EXCEPTION[vector];
