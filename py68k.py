@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/local/bin/pypy
 #
 # A M68K emulator for development purposes
 #
@@ -52,7 +52,10 @@ from musashi.m68k import (
 	M68K_REG_PC,
 	M68K_REG_PPC,
 	M68K_REG_SR,
-	M68K_REG_SP
+	M68K_REG_SP,
+	M68K_MODE_READ,
+	M68K_MODE_WRITE,
+	M68K_MODE_FETCH
 )
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
@@ -140,52 +143,55 @@ class image(object):
 		return None
 
 	def lineinfo(self, addr):
-		if addr in self._lineinfo_cache:
+		try:
 			return self._lineinfo_cache[addr]
 
-		# -i gives extra information about inlined functions, but it puts
-		# newlines in the result that mess up the log...
+		except KeyError:
 
-		symb = subprocess.Popen([self._addr2line, 
-					 '-pfC',
-					 '-e',
-					 args.image,
-					 '{:#x}'.format(addr)],
-					stdout=subprocess.PIPE)
-		output, err = symb.communicate()
+			# -i gives extra information about inlined functions, but it puts
+			# newlines in the result that mess up the log...
 
-		self._lineinfo_cache[addr] = output
-		return output
+			symb = subprocess.Popen([self._addr2line, 
+						 '-pfC',
+						 '-e',
+						 args.image,
+						 '{:#x}'.format(addr)],
+						stdout=subprocess.PIPE)
+			output, err = symb.communicate()
+
+			self._lineinfo_cache[addr] = output
+			return output
 
 	def symname(self, addr):
-		if addr in self._symbol_cache:
+		try:
 			return self._symbol_cache[addr]['name']
 
-		# look for the next highest symbol address
-		pos = bisect(self._symbol_index, addr)
-		if pos == 0:
-			# address lower than anything we know
-			return ''
-		insym = self._symbol_index[pos - 1]
+		except KeyError:
+			# look for the next highest symbol address
+			pos = bisect(self._symbol_index, addr)
+			if pos == 0:
+				# address lower than anything we know
+				return ''
+			insym = self._symbol_index[pos - 1]
 
-		# check that the value is within the symbol
-		delta = addr - insym
-		if self._symbol_cache[insym]['size'] <= delta:
-			return ''
+			# check that the value is within the symbol
+			delta = addr - insym
+			if self._symbol_cache[insym]['size'] <= delta:
+				return ''
 
-		# it is, construct a name + offset string 
-		name = '{}+{:#x}'.format(self._symbol_cache[insym]['name'], delta)
+			# it is, construct a name + offset string 
+			name = '{}+{:#x}'.format(self._symbol_cache[insym]['name'], delta)
 
-		# add it to the symbol cache
-		self._symbol_cache[addr] = { 'name': name, 'size' : 1 }
+			# add it to the symbol cache
+			self._symbol_cache[addr] = { 'name': name, 'size' : 1 }
 
-		return name
+			return name
 
 	def symrange(self, name):
-		if name in self._address_cache:
+		try:
 			addr = self._address_cache[name]
 			size = self._symbol_cache[addr]['size']
-		else:
+		except KeyError:
 			try:
 				addr = int(name)
 				size = 1
@@ -242,6 +248,7 @@ class emulator(object):
 		self._trace_write_triggers = list()
 		self._trace_instruction_triggers = list()
 		self._trace_exception_list = list()
+		self._trace_jump_cache = dict()
 
 		# allocate memory for the emulation
 		mem_init(memory_size)
@@ -404,7 +411,7 @@ class emulator(object):
 		Handle an invalid memory access
 		"""
 		try:
-			if chr(mode) == 'W':
+			if mode == M6K_MODE_WRITE:
 				cause = 'write to'
 			else:
 				cause = 'read from'
@@ -421,27 +428,20 @@ class emulator(object):
 		Cut a memory trace entry
 		"""
 		try:
-			kind = chr(mode)
-
-			if not self._trace_memory:
-				if kind == 'W':
-					set = self._trace_write_triggers
-				else:
-					set = self._trace_read_triggers
-
-				if addr in set:
+			# don't trace immediate fetches, since they are described by 
+			# instruction tracing
+			if mode == M68K_MODE_FETCH:
+				return 0
+			elif mode == M68K_MODE_READ:
+				if not self._trace_memory and addr in self._trace_read_triggers:
 					self._trace_trigger(addr, 'memory', ['memory'])
+				direction = 'READ'
+			elif mode == M68K_MODE_WRITE:
+				if not self._trace_memory and addr in self._trace_write_triggers:
+					self._trace_trigger(addr, 'memory', ['memory'])
+				direction = 'WRITE'
 
-			if self._trace_memory:
-				# don't trace immediate fetches, since they are described by the disassembly
-				kind = chr(mode)
-				if kind == 'I':
-					return 0
-				if kind == 'W':
-					direction = "WRITE"
-				else:
-					direction = "READ"
-			
+			if self._trace_memory:			
 				if width == 0:
 					info = '{:#04x}'.format(value)
 				elif width == 1:
@@ -463,12 +463,10 @@ class emulator(object):
 		"""
 		try:
 			pc = get_reg(M68K_REG_PC)
-			if not self._trace_instructions:
-				if pc in self._trace_instruction_triggers:
+			if not self._trace_instructions and pc in self._trace_instruction_triggers:
 					self._trace_trigger(pc, 'instruction', ['instructions', 'jumps'])
 
 			if self._trace_instructions:
-
 				dis = disassemble(pc, self._cpu_type)
 				info = ''
 				for reg in self.registers:
@@ -543,6 +541,9 @@ parser.add_argument('--cycle-limit',
 		    default=float('inf'),
 		    metavar='CYCLES',
 		    help='stop the emulation after CYCLES machine cycles')
+parser.add_argument('--trace-everything',
+		    action='store_true',
+		    help='enable all tracing options')
 parser.add_argument('--trace-memory',
 		    action='store_true',
 		    help='enable memory tracing at startup')
@@ -597,25 +598,25 @@ emu = emulator(memory_size = args.memory_size,
 	       trace_filename = args.trace_file)
 
 # set tracing options
-if args.trace_memory:
+if args.trace_memory or args.trace_everything:
 	emu.trace_enable('memory')
 for i in args.trace_read_trigger:
 	emu.trace_enable('read-trigger', i)
 for i in args.trace_write_trigger:
 	emu.trace_enable('write-trigger', i)
-if args.trace_instructions:
+if args.trace_instructions or args.trace_everything:
 	emu.trace_enable('instructions')
 for i in args.trace_instruction_trigger:
 	emu.trace_enable('instruction-trigger', i)
-if args.trace_jumps:
+if args.trace_jumps or args.trace_everything:
 	emu.trace_enable('jumps')
-if args.trace_exceptions:
+if args.trace_exceptions or args.trace_everything:
 	emu.trace_enable('exceptions')
 for i in args.trace_exception:
 	emu.trace_enable('exception', i)
 if args.trace_cycle_limit > 0:
 	emu.trace_enable('trace-cycle-limit', args.trace_cycle_limit)
-if args.trace_check_PC_in_text:
+if args.trace_check_PC_in_text or args.trace_everything:
 	emu.trace_enable('check-pc-in-text')
 
 # add some devices
