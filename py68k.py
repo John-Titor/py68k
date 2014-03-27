@@ -53,6 +53,8 @@ from musashi.m68k import (
 	M68K_REG_PPC,
 	M68K_REG_SR,
 	M68K_REG_SP,
+	M68K_REG_USP,
+	M68K_REG_ISP,
 	M68K_MODE_READ,
 	M68K_MODE_WRITE,
 	M68K_MODE_FETCH
@@ -82,6 +84,8 @@ class image(object):
 		self._addr2line = self._findtool('m68k-elf-addr2line')
 		self._text_base = 0
 		self._text_end = 0
+		self._low_sym = 0xffffffff
+		self._high_sym = 0
 
 		if self._addr2line is None:
 			raise RuntimeError("unable to find m68k-elf-addr2line and/or m68k-elf-readelf, check your PATH")
@@ -131,6 +135,9 @@ class image(object):
 			s_size = symbol['st_size']
 			s_name = str(symbol.name)
 
+			self._low_sym = min(s_addr, self._low_sym)
+			self._high_sym = max(s_addr + s_size, self._high_sym)
+
 			self._symbol_cache[s_addr] = { 'name': s_name, 'size' : s_size }
 			self._address_cache[s_name] = s_addr
 
@@ -163,6 +170,9 @@ class image(object):
 			return output
 
 	def symname(self, addr):
+		if addr < self._low_sym or addr >= self._high_sym:
+			return ''
+
 		try:
 			return self._symbol_cache[addr]['name']
 
@@ -208,25 +218,28 @@ class image(object):
 class emulator(object):
 
 	registers = {
-		'D0' : M68K_REG_D0,
-		'D1' : M68K_REG_D1,
-		'D2' : M68K_REG_D2,
-		'D3' : M68K_REG_D3,
-		'D4' : M68K_REG_D4,
-		'D5' : M68K_REG_D5,
-		'D6' : M68K_REG_D6,
-		'D7' : M68K_REG_D7,
-		'A0' : M68K_REG_A0,
-		'A1' : M68K_REG_A1,
-		'A2' : M68K_REG_A2,
-		'A3' : M68K_REG_A3,
-		'A4' : M68K_REG_A4,
-		'A5' : M68K_REG_A5,
-		'A6' : M68K_REG_A6,
-		'A7' : M68K_REG_A7,
-		'PC' : M68K_REG_PC,
-		'SR' : M68K_REG_SR,
-		'SP' : M68K_REG_SP}
+		'D0'  : M68K_REG_D0,
+		'D1'  : M68K_REG_D1,
+		'D2'  : M68K_REG_D2,
+		'D3'  : M68K_REG_D3,
+		'D4'  : M68K_REG_D4,
+		'D5'  : M68K_REG_D5,
+		'D6'  : M68K_REG_D6,
+		'D7'  : M68K_REG_D7,
+		'A0'  : M68K_REG_A0,
+		'A1'  : M68K_REG_A1,
+		'A2'  : M68K_REG_A2,
+		'A3'  : M68K_REG_A3,
+		'A4'  : M68K_REG_A4,
+		'A5'  : M68K_REG_A5,
+		'A6'  : M68K_REG_A6,
+		'A7'  : M68K_REG_A7,
+		'PC'  : M68K_REG_PC,
+		'SR'  : M68K_REG_SR,
+		'SP'  : M68K_REG_SP,
+		'USP' : M68K_REG_USP,
+		'SSP' : M68K_REG_ISP
+	}
 
 	device_base = 0xff0000
 	cpu_frequency = 8
@@ -411,7 +424,7 @@ class emulator(object):
 		Handle an invalid memory access
 		"""
 		try:
-			if mode == M6K_MODE_WRITE:
+			if mode == M68K_MODE_WRITE:
 				cause = 'write to'
 			else:
 				cause = 'read from'
