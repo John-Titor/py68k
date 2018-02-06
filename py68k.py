@@ -89,10 +89,9 @@ class emulator(object):
 		'SSP' : M68K_REG_ISP
 	}
 
-	device_base = 0xff0000
 	cpu_frequency = 8
 
-	def __init__(self, image_filename, memory_size, trace_filename):
+	def __init__(self, image_filename, memory_size, trace_filename, device_base):
 
 		self._dead = False
 		self._interrupted = False
@@ -110,6 +109,8 @@ class emulator(object):
 		self._trace_instruction_triggers = list()
 		self._trace_exception_list = list()
 		self._trace_jump_cache = dict()
+
+		self._device_base = device_base
 
 		# allocate memory for the emulation
 		mem_init(memory_size)
@@ -133,7 +134,7 @@ class emulator(object):
 		mem_set_trace_mode(1)
 
 		# configure device space
-		self._root_device = device.root_device(self, self.device_base)
+		self._root_device = device.root_device(self, self._device_base)
 
 		# load the executable image
 		self._image = self.loadImage(image_filename)
@@ -401,13 +402,36 @@ class emulator(object):
 		end_timeslice()
 
 
+def configure(args):
+
+	if args.target == 'simple':
+		emu = emulator(memory_size = 128,
+	       		       image_filename = args.image,
+	       		       trace_filename = args.trace_file,
+	       		       device_base = 0xff0000)
+
+		# add some devices
+		emu.add_device(device.uart, 0, M68K_IRQ_2)
+		emu.add_device(device.timer, 0x1000, M68K_IRQ_6)
+
+	elif args.target == 'tiny68k':
+		emu = emulator(memory_size = 16352,
+	       		       image_filename = args.image,
+	       		       trace_filename = args.trace_file,
+	       		       device_base = 0xff8000)
+
+	else:
+		raise RuntimeError('unsupported target: ' + args.target)
+
+	return emu
+
 # Parse commandline arguments
 parser = argparse.ArgumentParser(description='m68k emulator')
 
-parser.add_argument('--memory-size',
-		    type=int,
-		    default=128,
-		    help='memory size in KiB')
+parser.add_argument('--target',
+		    type=str,
+		    default='none',
+		    help='target machine, one of simple, tiny68k')
 parser.add_argument('--trace-file',
 		    type=str,
 		    default='trace.out',
@@ -469,9 +493,7 @@ parser.add_argument('image',
 args = parser.parse_args()
 
 # get an emulator
-emu = emulator(memory_size = args.memory_size,
-	       image_filename = args.image,
-	       trace_filename = args.trace_file)
+emu = configure(args)
 
 # set tracing options
 if args.trace_memory or args.trace_everything:
@@ -494,10 +516,6 @@ if args.trace_cycle_limit > 0:
 	emu.trace_enable('trace-cycle-limit', args.trace_cycle_limit)
 if args.trace_check_PC_in_text or args.trace_everything:
 	emu.trace_enable('check-pc-in-text')
-
-# add some devices
-emu.add_device(device.uart, 0, M68K_IRQ_2)
-emu.add_device(device.timer, 0x1000, M68K_IRQ_6)
 
 # run some instructions
 emu.run(args.cycle_limit)
