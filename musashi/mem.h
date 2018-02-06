@@ -13,10 +13,10 @@
 /* ------ Defines ----- */
 
 /*
- * Simulate memory decode on 64K boundaries.
+ * Simulate memory decode on 4K boundaries.
  */
 #define MEM_MAX_ADDRESS		(1U << 24)
-#define MEM_PAGE_SIZE		(1U << 16)
+#define MEM_PAGE_SIZE		(1U << 12)
 #define MEM_NUM_PAGES		(MEM_MAX_ADDRESS / MEM_PAGE_SIZE)
 
 #define MEM_PAGE(_addr)		(_addr / MEM_PAGE_SIZE)

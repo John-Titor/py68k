@@ -1,2 +1,4 @@
 trace.out
 *.pyc
+*.bin
+*.elf

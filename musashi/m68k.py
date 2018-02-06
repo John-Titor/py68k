@@ -75,7 +75,7 @@ def find_lib():
         path = os.path.dirname(os.path.realpath(__file__))
         all_files = os.listdir(path)
         for f in all_files:
-                if f.find('musashi') != -1:
+                if f.find('libmusashi') != -1:
                         return os.path.join(path,f)
         raise ImportError("Can't find musashi native lib")
 

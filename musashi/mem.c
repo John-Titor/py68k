@@ -325,7 +325,7 @@ int mem_init(uint ram_size_kib)
 {
   int i;
   ram_size = ram_size_kib * 1024;
-  ram_pages = ram_size_kib / 64;
+  ram_pages = ram_size / MEM_PAGE_SIZE;
   ram_data = (uint8_t *)malloc(ram_size);
 
   for(i=0;i<MEM_NUM_PAGES;i++) {
