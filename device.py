@@ -3,7 +3,11 @@ from musashi.m68k import (
 	set_irq,
 	set_int_ack_callback,
 	mem_set_device,
-	mem_set_device_handler
+	mem_set_device_handler,
+	get_reg,
+	M68K_REG_SR,
+	M68K_IRQ_SPURIOUS,
+	M68K_IRQ_AUTOVECTOR
 )
 
 class device(object):
@@ -48,6 +52,9 @@ class device(object):
 	def reset(self):
 		return
 
+	def get_interrupt(self):
+		return 0
+
 	def get_vector(self):
 		return M68K_IRQ_SPURIOUS
 
@@ -60,7 +67,7 @@ class root_device(device):
 		"""
 		Initialise the root device
 		"""
-		self._debug = False
+		self._debug = True
 		self._name = 'root'
 		device._emu = emu
 		device._root_device = self
@@ -69,18 +76,20 @@ class root_device(device):
 		mem_set_device_handler(self._access)
 
 	def _access(self, mode, width, addr, value):
-		self.trace('access', '{}'.format(addr))
-		self.trace('mappings', device._register_to_device)
+		#self.trace('access', '{}'.format(addr))
+		#self.trace('mappings', device._register_to_device)
 
 		# look for a device
 		if addr not in device._register_to_device:
 			self.trace('lookup', 'failed to find device to handle access')
 			device._emu.cb_buserror(mode, width, addr)
 			return 0
-		else:
-			# dispatch to device emulator
-			dev_addr = addr - device._device_base
-			return device._register_to_device[addr].access(chr(mode), width, dev_addr, value)
+		
+		# dispatch to device emulator
+		dev_addr = addr - device._device_base
+		value = device._register_to_device[addr].access(chr(mode), width, dev_addr, value)
+		self.check_interrupts()
+		return value
 
 	def add_device(self, dev, offset, interrupt = -1, debug = False):
 		new_dev = dev(offset, interrupt, debug)
@@ -93,6 +102,8 @@ class root_device(device):
 			ret = dev.tick(current_time)
 			if ret > 0 and (deadline == 0 or ret < deadline):
 				deadline = ret
+
+		self.check_interrupts()
 		return deadline
 
 	def reset(self):
@@ -103,8 +114,24 @@ class root_device(device):
 		for dev in device._devices:
 			vector = dev.get_vector(interrupt)
 			if vector != M68K_IRQ_SPURIOUS:
+				self.trace('{} returns vector 0x{:x}'.format(dev._name, vector))
 				return vector
+		self.trace('no interrupting device')
 		return M68K_IRQ_SPURIOUS
+
+	def check_interrupts(self):
+		ipl = 0
+		for dev in device._devices:
+			dev_ipl = dev.get_interrupt()
+			if dev_ipl > ipl:
+				interruptingDevice = dev
+				ipl = dev_ipl
+		if ipl > 0:
+			SR = get_reg(M68K_REG_SR)
+			cpl = (SR >> 8) & 7
+			if ipl > cpl:
+				self.trace('{} asserts ipl {}'.format(interruptingDevice._name, ipl))
+		set_irq(ipl)
 
 class uart(device):
 	"""

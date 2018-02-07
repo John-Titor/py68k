@@ -2,7 +2,7 @@ import sys
 from device import device
 from collections import deque
 
-class _Channel():
+class Channel():
 
 	REG_MR		= 0x01
 	REG_SR		= 0x03
@@ -10,6 +10,8 @@ class _Channel():
 	REG_CSR		= 0x03
 	REG_CR		= 0x05
 	REG_TB		= 0x07
+
+	MR1_FFULL_EN    = 0x40
 
 	CTRL_CMD_MASK	= 0xf0
 	CTRL_BRKSTOP    = 0x70
@@ -24,6 +26,18 @@ class _Channel():
 	CTRL_RXDIS      = 0x02
 	CTRL_RXEN       = 0x01
 
+	STATUS_RECEIVED_BREAK       = 0x80
+	STATUS_FRAMING_ERROR        = 0x40
+	STATUS_PARITY_ERROR         = 0x20
+	STATUS_OVERRUN_ERROR        = 0x10
+	STATUS_TRANSMITTER_EMPTY    = 0x08
+	STATUS_TRANSMITTER_READY    = 0x04
+	STATUS_FIFO_FULL            = 0x02
+	STATUS_RECEIVER_READY       = 0x01
+
+	INT_TXRDY	= 0x01
+	INT_RXRDY_FFULL	= 0x02
+
 	def __init__(self, parent):
 		self.reset()
 		self._parent = parent
@@ -33,66 +47,66 @@ class _Channel():
 		self._mr2 = 0;
 		self._mrAlt = False;
 		self._sr = 0;
-		self._rfifo = deque()
+		self._rxfifo = deque()
 		self._rxEnable = False;
 		self._txEnable = False;
 
 	def access(self, mode, addr, value):
 		if mode == device.MODE_READ:
-			if addr == _Channel.REG_MR:
+			if addr == Channel.REG_MR:
 				if self._mrAlt:
 					value = self._mr2
 				else:
 					self._mrAlt = True
 					value = self._mr1
 
-			elif addr == _Channel.REG_SR:
+			elif addr == Channel.REG_SR:
 				value = self._sr
 
-			elif addr == _Channel.REG_RB:
-				if len(self._rfifo) > 0:
-					value = self._rfifo.popleft()
+			elif addr == Channel.REG_RB:
+				if len(self._rxfifo) > 0:
+					value = self._rxfifo.popleft()
 
 			# default read result
-			value = 0xff
+			else:
+				value = 0xff
 
 			#self._parent.trace('{:x} -> 0x{:x}'.format(addr, value))
 
 		if mode == device.MODE_WRITE:
 			#self._parent.trace('{:x} <- 0x{:x}'.format(addr, value))
 
-			if addr == _Channel.REG_MR:
+			if addr == Channel.REG_MR:
 				if self._mrAlt:
 					self._mr2 = value
 				else:
 					self._mrAlt = True
 					self._mr1 = value
 
-			#elif addr == _Channel.REG_CSR:
+			#elif addr == Channel.REG_CSR:
 
-			elif addr == _Channel.REG_CR:
+			elif addr == Channel.REG_CR:
 				# rx/tx dis/enable logic
-				if value & _Channel.CTRL_RXDIS:
+				if value & Channel.CTRL_RXDIS:
 					self._rxEnable = False
-				elif value & _Channel.CTRL_RXEN:
+				elif value & Channel.CTRL_RXEN:
 					self._rxEnable = True
-				if value & _Channel.CTRL_TXDIS:
+				if value & Channel.CTRL_TXDIS:
 					self._txEnable = False
-				elif value & _Channel.CTRL_TXEN:
+				elif value & Channel.CTRL_TXEN:
 					self._txEnable = True
 
-				cmd = value & _Channel.CTRL_CMD_MASK
-				if cmd == _Channel.CTRL_MRRST:
+				cmd = value & Channel.CTRL_CMD_MASK
+				if cmd == Channel.CTRL_MRRST:
 					self._mrAlt = False
-				elif cmd == _Channel.CTRL_RXRST:
+				elif cmd == Channel.CTRL_RXRST:
 					self._rxEnable = False
 					self._rxfifo.clear()
-				elif cmd == _Channel.CTRL_TXRST:
+				elif cmd == Channel.CTRL_TXRST:
 					self._txEnable = False
 					#self._txfifo
 
-			elif addr == _Channel.REG_TB:
-				print('TX')
+			elif addr == Channel.REG_TB:
 				# XXX this is a bit hokey...
 				try:
 					sys.stdout.write(chr(value))
@@ -102,8 +116,32 @@ class _Channel():
 				except Exception:
 					pass
 
+		self.update_status()
 		return value
 
+	def update_status(self):
+		# transmitter is always ready
+		self._sr = Channel.STATUS_TRANSMITTER_EMPTY | Channel.STATUS_TRANSMITTER_READY
+
+		rxcount = len(self._rxfifo)
+		if rxcount > 0:
+			self._sr |= Channel.STATUS_RECEIVER_READY
+			if (rxcount > 2):
+				self._sr |= Channel.STATUS_FIFO_FULL
+
+	def get_interrupts(self):
+
+		interrupts = 0
+		if self._sr & Channel.STATUS_TRANSMITTER_READY:
+			interrupts |= Channel.INT_TXRDY
+
+		if self._mr1 & Channel.MR1_FFULL_EN:
+			if self._sr & Channel.STATUS_FIFO_FULL:
+				interrupts |= Channel.INT_RXRDY_FFULL
+		elif self._sr & Channel.STATUS_RECEIVER_READY:
+			interrupts |= Channel.INT_RXRDY_FFULL
+
+		return interrupts
 
 class DUART(device):
 
@@ -161,8 +199,8 @@ class DUART(device):
 		self._debug = debug
 		self.map_registers(DUART._registers)
 
-		self._a = _Channel(self);
-		self._b = _Channel(self);
+		self._a = Channel(self);
+		self._b = Channel(self);
 		self.reset()
 		self.trace('init done')
 
@@ -238,10 +276,12 @@ class DUART(device):
 			#elif addr == DUART.REG_OPRCLR:
 			pass
 
+		self._update_status()
+
 		return value
 
 	def tick(self, current_time):
-		pass
+		self._update_status()
 
 	def reset(self):
 		self._a.reset()
@@ -253,6 +293,16 @@ class DUART(device):
 		self._countReload = 0xffff
 		self._acr = DUART.ACR_MODE_TMR_XTAL
 
+	def get_interrupt(self):
+		if self._ivr & self._imr:
+			return self._interrupt
+		return 0
 
 	def get_vector(self, interrupt):
-		pass
+		return self._ivr
+
+	def _update_status(self):
+		self._isr &= ~0x33
+		self._isr |= self._a.get_interrupts() 
+		self._isr |= self._b.get_interrupts() << 4
+

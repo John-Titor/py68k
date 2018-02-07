@@ -33,10 +33,10 @@ class image(object):
 			raise RuntimeError("binary image reset vector points outside image")
 
 	def lineinfo(self, addr):
-		return ''
+		return '0x{:08x}'.format(addr)
 
 	def symname(self, addr):
-		return ''
+		return '0x{:08x}'.format(addr)
 
 	def symrange(self, name):
 		raise RuntimeError('no symbols')
