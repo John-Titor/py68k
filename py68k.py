@@ -190,11 +190,13 @@ class emulator(object):
 			pass
 
 
-	def add_device(self, dev, offset, interrupt = -1):
+	def add_device(self, dev, address, interrupt = -1, debug = False):
 		"""
 		Attach a device to the emulator at the given offset in device space
 		"""
-		self._root_device.add_device(dev, offset, interrupt)
+		if address < self._device_base:
+			raise RuntimeError("device cannot be registered outside device space")
+		self._root_device.add_device(dev, address - self._device_base, interrupt, debug)
 
 
 	@property
@@ -411,14 +413,17 @@ def configure(args):
 	       		       device_base = 0xff0000)
 
 		# add some devices
-		emu.add_device(device.uart, 0, M68K_IRQ_2)
-		emu.add_device(device.timer, 0x1000, M68K_IRQ_6)
+		emu.add_device(device.uart, 0xff0000, M68K_IRQ_2)
+		emu.add_device(device.timer, 0xff1000, M68K_IRQ_6)
 
 	elif args.target == 'tiny68k':
-		emu = emulator(memory_size = 16352,
+		emu = emulator(memory_size = (16 * 1024 - 32),
 	       		       image_filename = args.image,
 	       		       trace_filename = args.trace_file,
-	       		       device_base = 0xff8000)
+	       		       device_base = 0xfff000)
+
+		import deviceDUART
+		emu.add_device(deviceDUART.DUART, 0xfff000, M68K_IRQ_2, debug = True)
 
 	else:
 		raise RuntimeError('unsupported target: ' + args.target)

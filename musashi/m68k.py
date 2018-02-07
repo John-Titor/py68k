@@ -55,6 +55,8 @@ M68K_REG_IR           = 30 # Instruction register
 M68K_REG_CPU_TYPE     = 31 # Type of CPU being run
 
 # interrupts
+M68K_IRQ_AUTOVECTOR   = 0xffffffff
+M68K_IRQ_SPURIOUS     = 0xfffffffe
 M68K_IRQ_NONE         = 0
 M68K_IRQ_1            = 1
 M68K_IRQ_2            = 2
@@ -90,6 +92,7 @@ reset_instr_callback_func_type   = CFUNCTYPE(None)
 invalid_func_type                = CFUNCTYPE(None, c_int, c_int, c_uint)
 trace_func_type                  = CFUNCTYPE(c_int, c_int, c_int, c_uint, c_uint)
 instr_hook_callback_func         = CFUNCTYPE(None)
+int_ack_callback_func            = CFUNCTYPE(c_int, c_int)
 
 # declare cpu functions
 cpu_init_func                    = lib.m68k_init
@@ -173,6 +176,11 @@ def set_instr_hook_callback(func):
         global instr_hook_callback
         instr_hook_callback = instr_hook_callback_func(func)
         lib.m68k_set_instr_hook_callback(instr_hook_callback)
+
+def set_int_ack_callback(func):
+        global int_ack_callback
+        int_ack_callback = int_ack_callback_func(func)
+        lib.m68k_set_int_ack_callback(int_ack_callback)
 
 def set_cpu_type(t):
         lib.m68k_set_cpu_type(c_uint(t))
