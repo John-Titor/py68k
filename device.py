@@ -13,9 +13,20 @@ from musashi.m68k import (
 class device(object):
 	"""
 	Generic device model
+
+	Properties that can / should be set by instances:
+
+	_name		text name of the instance
+	_address	absolute base address of the instance or None if no registers
+	_interrupt	IPL asserted by the device or None if not interrupting
+	_debug		True to enable tracing
+
 	"""
 	_register_to_device = dict()
 	_devices = list()
+	_emu = None
+
+	root_device = None
 
 	MODE_READ = 'R'
 	MODE_WRITE = 'W'
@@ -23,24 +34,28 @@ class device(object):
 	WIDTH_16 = 1
 	WIDTH_32 = 2
 
-	def __init__(self):
-		self._debug = False
+	def __init__(self, name, address = None, interrupt = None, debug = False):
+		self._name = name
+		self._address = address
+		self._interrupt = interrupt
+		self._debug = debug
 
 	def map_registers(self, registers):
 		"""
 		Map device registers
 		"""
+		if self._address is None:
+			raise RuntimeError('cannot map registers without base address')
 		self._register_name_map = {}
 		for reg in registers:
-			addr = self._device_base + registers[reg]
-			if (addr in device._register_to_device): 
-				other = device._register_to_device[addr]
+			regaddr = self._address + registers[reg]
+			if (regaddr in device._register_to_device): 
+				other = device._register_to_device[regaddr]
 				if self != other:
-					raise RuntimeError('register at {} already assigned to {}'.format(addr, other._name))
-			device._register_to_device[addr] = self
-			device._emu.trace('DEVICE', info='add register {}/0x{:x} for {}'.format(reg, registers[reg], self._name))
+					raise RuntimeError('register at {} already assigned to {}'.format(regaddr, other._name))
+			device._register_to_device[regaddr] = self
+			device._emu.trace('DEVICE', address = regaddr, info='add register {}/0x{:x} for {}'.format(reg, registers[reg], self._name))
 			self._register_name_map[registers[reg]] = reg
-
 
 	def trace(self, action, info=''):
 		if self._debug:
@@ -58,43 +73,48 @@ class device(object):
 	def get_vector(self):
 		return M68K_IRQ_SPURIOUS
 
-	def get_register_name(self, addr):
-		return self._register_name_map[addr]
+	def get_register_name(self, offset):
+		return self._register_name_map[offset]
+
 
 class root_device(device):
 
-	def __init__(self, emu, base):
-		"""
-		Initialise the root device
-		"""
-		self._debug = True
-		self._name = 'root'
+	_console_output_driver = None
+	_console_input_driver = None
+
+	def __init__(self, emu, address, debug = False):
+		super(root_device, self).__init__('root', address = address, debug = debug)
 		device._emu = emu
-		device._root_device = self
-		device._device_base = base
+		device._device_base = address
+		device.root_device = self
+
 		set_int_ack_callback(self.int_callback)
 		mem_set_device_handler(self._access)
 
-	def _access(self, mode, width, addr, value):
-		#self.trace('access', '{}'.format(addr))
+	def _access(self, mode, width, address, value):
+		#self.trace('access', '{}'.format(address))
 		#self.trace('mappings', device._register_to_device)
 
 		# look for a device
-		if addr not in device._register_to_device:
+		if address not in device._register_to_device:
 			self.trace('lookup', 'failed to find device to handle access')
-			device._emu.cb_buserror(mode, width, addr)
+			device._emu.cb_buserror(mode, width, address)
 			return 0
 		
 		# dispatch to device emulator
-		dev_addr = addr - device._device_base
-		value = device._register_to_device[addr].access(chr(mode), width, dev_addr, value)
+		offset = address - device._device_base
+		value = device._register_to_device[address].access(chr(mode), width, offset, value)
 		self.check_interrupts()
 		return value
 
-	def add_device(self, dev, offset, interrupt = -1, debug = False):
-		new_dev = dev(offset, interrupt, debug)
+	def add_device(self, dev, address = None, interrupt = None, debug = False):
+		if address is not None:
+			if address < self._device_base:
+				raise RuntimeError("device cannot be registered outside device space")
+			mem_set_device(address);
+		print dev
+		new_dev = dev(address = address, interrupt = interrupt, debug = debug)
 		device._devices.append(new_dev)
-		mem_set_device(device._device_base + offset);
 
 	def tick(self, current_time):
 		deadline = 0
@@ -132,6 +152,22 @@ class root_device(device):
 			if ipl > cpl:
 				self.trace('{} asserts ipl {}'.format(interruptingDevice._name, ipl))
 		set_irq(ipl)
+
+	def register_console_input_driver(self, inst):
+		root_device._console_input_driver = inst
+
+	def register_console_output_driver(self, inst):
+		root_device._console_output_driver = inst
+
+	def console_input(self, input):
+		if root_device._console_input_driver is not None:
+			root_device._console_input_driver.handle_console_input(input)
+
+	def console_output(self, output):
+		if root_device._console_output_driver is not None:
+			root_device._console_output_driver.handle_console_output(output)
+
+# XXX these are horribly outdated right now...
 
 class uart(device):
 	"""

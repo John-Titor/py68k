@@ -3,7 +3,7 @@
 # A M68K emulator for development purposes
 #
 
-import os, argparse, subprocess, time
+import os, argparse, subprocess, time, curses
 
 import device
 import imageELF
@@ -175,13 +175,13 @@ class emulator(object):
 			if self._elapsed_cycles > self._cycle_limit:
 				self._fatal('cycle limit exceeded')
 
-		self.log('\nterminating: {}'.format(self._postmortem))
+		raise RuntimeError('terminating: {}'.format(self._postmortem))
 
 
 	def finish(self):
-		self.log('{} cycles in {} seconds, {} cps'.format(self._elapsed_cycles,
-							     self._elapsed_time,
-							     int(self._elapsed_cycles / self._elapsed_time)))
+		self.trace('', info = '{} cycles in {} seconds, {} cps'.format(self._elapsed_cycles,
+									       self._elapsed_time,
+							                       int(self._elapsed_cycles / self._elapsed_time)))
 
 		try:
 			self._trace_file.flush()
@@ -190,13 +190,11 @@ class emulator(object):
 			pass
 
 
-	def add_device(self, dev, address, interrupt = -1, debug = False):
+	def add_device(self, dev, address = None, interrupt = None, debug = False):
 		"""
 		Attach a device to the emulator at the given offset in device space
 		"""
-		if address < self._device_base:
-			raise RuntimeError("device cannot be registered outside device space")
-		self._root_device.add_device(dev, address - self._device_base, interrupt, debug)
+		self._root_device.add_device(dev, address, interrupt, debug)
 
 
 	@property
@@ -404,7 +402,7 @@ class emulator(object):
 		end_timeslice()
 
 
-def configure(args):
+def configure(args, stdscr):
 
 	if args.target == 'simple':
 		emu = emulator(memory_size = 128,
@@ -423,10 +421,17 @@ def configure(args):
 	       		       device_base = 0xfff000)
 
 		import deviceDUART
-		emu.add_device(deviceDUART.DUART, 0xfff000, M68K_IRQ_2, debug = True)
+		emu.add_device(deviceDUART.DUART, 
+			       address = 0xfff000,
+			       interrupt = M68K_IRQ_2,
+			       debug = True)
 
 	else:
 		raise RuntimeError('unsupported target: ' + args.target)
+
+	import deviceConsole
+	deviceConsole.Console.stdscr = stdscr
+	emu.add_device(deviceConsole.Console, debug = True)
 
 	return emu
 
@@ -497,32 +502,36 @@ parser.add_argument('image',
 		    help='executable to load')
 args = parser.parse_args()
 
-# get an emulator
-emu = configure(args)
+def run_emu(stdscr, args):
+	# get an emulator
+	emu = configure(args, stdscr)
 
-# set tracing options
-if args.trace_memory or args.trace_everything:
-	emu.trace_enable('memory')
-for i in args.trace_read_trigger:
-	emu.trace_enable('read-trigger', i)
-for i in args.trace_write_trigger:
-	emu.trace_enable('write-trigger', i)
-if args.trace_instructions or args.trace_everything:
-	emu.trace_enable('instructions')
-for i in args.trace_instruction_trigger:
-	emu.trace_enable('instruction-trigger', i)
-if args.trace_jumps or args.trace_everything:
-	emu.trace_enable('jumps')
-if args.trace_exceptions or args.trace_everything:
-	emu.trace_enable('exceptions')
-for i in args.trace_exception:
-	emu.trace_enable('exception', i)
-if args.trace_cycle_limit > 0:
-	emu.trace_enable('trace-cycle-limit', args.trace_cycle_limit)
-if args.trace_check_PC_in_text or args.trace_everything:
-	emu.trace_enable('check-pc-in-text')
+	# set tracing options
+	if args.trace_memory or args.trace_everything:
+		emu.trace_enable('memory')
+	for i in args.trace_read_trigger:
+		emu.trace_enable('read-trigger', i)
+	for i in args.trace_write_trigger:
+		emu.trace_enable('write-trigger', i)
+	if args.trace_instructions or args.trace_everything:
+		emu.trace_enable('instructions')
+	for i in args.trace_instruction_trigger:
+		emu.trace_enable('instruction-trigger', i)
+	if args.trace_jumps or args.trace_everything:
+		emu.trace_enable('jumps')
+	if args.trace_exceptions or args.trace_everything:
+		emu.trace_enable('exceptions')
+	for i in args.trace_exception:
+		emu.trace_enable('exception', i)
+	if args.trace_cycle_limit > 0:
+		emu.trace_enable('trace-cycle-limit', args.trace_cycle_limit)
+	if args.trace_check_PC_in_text or args.trace_everything:
+		emu.trace_enable('check-pc-in-text')
 
-# run some instructions
-emu.run(args.cycle_limit)
+	# run some instructions
+	emu.run(args.cycle_limit)
 
-emu.finish()
+	emu.finish()
+
+curses.wrapper(run_emu, args)
+

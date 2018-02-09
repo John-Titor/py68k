@@ -107,19 +107,12 @@ class Channel():
 					#self._txfifo
 
 			elif addr == Channel.REG_TB:
-				# XXX this is a bit hokey...
-				try:
-					sys.stdout.write(chr(value))
-					sys.stdout.flush()
-				except KeyboardInterrupt:
-					raise KeyboardInterrupt
-				except Exception:
-					pass
+				device.root_device.console_output(value)
 
-		self.update_status()
+		self._update_status()
 		return value
 
-	def update_status(self):
+	def _update_status(self):
 		# transmitter is always ready
 		self._sr = Channel.STATUS_TRANSMITTER_EMPTY | Channel.STATUS_TRANSMITTER_READY
 
@@ -142,6 +135,12 @@ class Channel():
 			interrupts |= Channel.INT_RXRDY_FFULL
 
 		return interrupts
+
+	def handle_console_input(self, input):
+		self._rxfifo.append(input)
+		self._update_status()
+
+
 
 class DUART(device):
 
@@ -192,11 +191,8 @@ class DUART(device):
 	ACR_MODE_TMR_XTAL	= 0x60
 	ACR_MODE_TMR_XTAL16	= 0x70
 
-	def __init__(self, base, interrupt, debug = False):
-		self._base = base
-		self._name = 'DUART'
-		self._interrupt = interrupt
-		self._debug = debug
+	def __init__(self, address, interrupt, debug):
+		super(DUART, self).__init__('DUART', address = address, interrupt = interrupt, debug = debug)
 		self.map_registers(DUART._registers)
 
 		self._a = Channel(self);
@@ -204,76 +200,78 @@ class DUART(device):
 		self.reset()
 		self.trace('init done')
 
-	def access(self, mode, width, addr, value):
+		device.root_device.register_console_input_driver(self._a)
+
+	def access(self, mode, width, offset, value):
 
 		if mode == device.MODE_READ:
-			regsel = addr & DUART.REG_SELMASK
+			regsel = offset & DUART.REG_SELMASK
 			if regsel == DUART.REG_SEL_A:
-				value = self._a.access(mode, addr - DUART.REG_SEL_A, value);
+				value = self._a.access(mode, offset - DUART.REG_SEL_A, value);
 
 			elif regsel == DUART.REG_SEL_B:
-				value = self._b.access(mode, addr - DUART.REG_SEL_B, value);
+				value = self._b.access(mode, offset - DUART.REG_SEL_B, value);
 
-			elif addr == DUART.REG_IPCR:
+			elif offset == DUART.REG_IPCR:
 				value = 0x03	# CTSA/CTSB are always asserted
 
-			elif addr == DUART.REG_ISR:
+			elif offset == DUART.REG_ISR:
 				value = self._isr
 
-			elif addr == DUART.REG_CUR:
+			elif offset == DUART.REG_CUR:
 				value = self._count >> 8
 
-			elif addr == DUART.REG_CLR:
+			elif offset == DUART.REG_CLR:
 				value = self._count & 0xff
 
-			elif addr == DUART.REG_IVR:
+			elif offset == DUART.REG_IVR:
 				value = self._ivr
 
-			elif addr == DUART.REG_IPR:
+			elif offset == DUART.REG_IPR:
 				value = 0x03	# CTSA/CTSB are always asserted
 
-			elif addr == DUART.REG_STARTCC:
+			elif offset == DUART.REG_STARTCC:
 				self._count = self._countReload
 
-			elif addr == DUART.REG_STOPCC:
+			elif offset == DUART.REG_STOPCC:
 				pass
 
 			else:
 				value = 0xff
 
-			regname = self.get_register_name(addr).split('/')[0]
+			regname = self.get_register_name(offset).split('/')[0]
 			self.trace('{} -> 0x{:02x}'.format(regname, value))
 
 		elif mode == device.MODE_WRITE:
-			regname = self.get_register_name(addr).split('/')[-1]
+			regname = self.get_register_name(offset).split('/')[-1]
 			self.trace('{} <- 0x{:02x}'.format(regname, value))
 
-			regsel = addr & DUART.REG_SELMASK
+			regsel = offset & DUART.REG_SELMASK
 			if regsel == DUART.REG_SEL_A:
-				self._a.access(mode, addr - DUART.REG_SEL_A, value);
+				self._a.access(mode, offset - DUART.REG_SEL_A, value);
 
 			elif regsel == DUART.REG_SEL_B:
-				self._b.access(mode, addr - DUART.REG_SEL_B, value);
+				self._b.access(mode, offset - DUART.REG_SEL_B, value);
 
-			elif addr == DUART.REG_ACR:
+			elif offset == DUART.REG_ACR:
 				self._acr = value
 
-			elif addr == DUART.REG_IMR:
+			elif offset == DUART.REG_IMR:
 				self._imr = value
 				# XXX interrupt status may have changed...
 
-			elif addr == DUART.REG_CTUR:
+			elif offset == DUART.REG_CTUR:
 				self._countReload = (value << 8) + (self._countReload & 0xff)
 
-			elif addr == DUART.REG_CTLR:
+			elif offset == DUART.REG_CTLR:
 				self._countReload = (self._countReload & 0xff00) + value
 
-			elif addr == DUART.REG_IVR:
+			elif offset == DUART.REG_IVR:
 				self._ivr = value
 
-			#elif addr == DUART.REG_OPCR:
-			#elif addr == DUART.REG_OPRSET:
-			#elif addr == DUART.REG_OPRCLR:
+			#elif offset == DUART.REG_OPCR:
+			#elif offset == DUART.REG_OPRSET:
+			#elif offset == DUART.REG_OPRCLR:
 			pass
 
 		self._update_status()
@@ -299,7 +297,9 @@ class DUART(device):
 		return 0
 
 	def get_vector(self, interrupt):
-		return self._ivr
+		if self._ivr & self._imr:
+			return self._ivr
+		return M68K_IRQ_SPURIOUS
 
 	def _update_status(self):
 		self._isr &= ~0x33
