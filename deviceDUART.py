@@ -109,10 +109,10 @@ class Channel():
 			elif addr == Channel.REG_TB:
 				device.root_device.console_output(value)
 
-		self._update_status()
+		self.update_status()
 		return value
 
-	def _update_status(self):
+	def update_status(self):
 		# transmitter is always ready
 		self._sr = Channel.STATUS_TRANSMITTER_EMPTY | Channel.STATUS_TRANSMITTER_READY
 
@@ -138,7 +138,8 @@ class Channel():
 
 	def handle_console_input(self, input):
 		self._rxfifo.append(input)
-		self._update_status()
+		self.update_status()
+		self._parent.update_status()
 
 
 
@@ -274,12 +275,12 @@ class DUART(device):
 			#elif offset == DUART.REG_OPRCLR:
 			pass
 
-		self._update_status()
+		self.update_status()
 
 		return value
 
 	def tick(self, current_time):
-		self._update_status()
+		self.update_status()
 
 	def reset(self):
 		self._a.reset()
@@ -292,16 +293,16 @@ class DUART(device):
 		self._acr = DUART.ACR_MODE_TMR_XTAL
 
 	def get_interrupt(self):
-		if self._ivr & self._imr:
+		if self._isr & self._imr:
 			return self._interrupt
 		return 0
 
 	def get_vector(self, interrupt):
-		if self._ivr & self._imr:
+		if self._isr & self._imr:
 			return self._ivr
 		return M68K_IRQ_SPURIOUS
 
-	def _update_status(self):
+	def update_status(self):
 		self._isr &= ~0x33
 		self._isr |= self._a.get_interrupts() 
 		self._isr |= self._b.get_interrupts() << 4
