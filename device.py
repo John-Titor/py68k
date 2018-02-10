@@ -89,9 +89,9 @@ class root_device(device):
 		device.root_device = self
 
 		set_int_ack_callback(self.int_callback)
-		mem_set_device_handler(self._access)
+		mem_set_device_handler(self.access_callback)
 
-	def _access(self, mode, width, address, value):
+	def access_callback(self, mode, width, address, value):
 		#self.trace('access', '{}'.format(address))
 		#self.trace('mappings', device._register_to_device)
 
@@ -102,9 +102,12 @@ class root_device(device):
 			return 0
 		
 		# dispatch to device emulator
-		offset = address - device._device_base
-		value = device._register_to_device[address].access(chr(mode), width, offset, value)
-		self.check_interrupts()
+		try:
+			offset = address - device._device_base
+			value = device._register_to_device[address].access(chr(mode), width, offset, value)
+			self.check_interrupts()
+		except Exception as e:
+			self._emu.fatal(e.args)
 		return value
 
 	def add_device(self, dev, address = None, interrupt = None, debug = False):
@@ -131,13 +134,18 @@ class root_device(device):
 			dev.reset()
 
 	def int_callback(self, interrupt):
-		for dev in device._devices:
-			vector = dev.get_vector(interrupt)
-			if vector != M68K_IRQ_SPURIOUS:
-				self.trace('{} returns vector 0x{:x}'.format(dev._name, vector))
-				return vector
-		self.trace('no interrupting device')
+		try:
+			for dev in device._devices:
+				vector = dev.get_vector(interrupt)
+				if vector != M68K_IRQ_SPURIOUS:
+					self.trace('{} returns vector 0x{:x}'.format(dev._name, vector))
+					return vector
+			self.trace('no interrupting device')
+		except Exception as e:
+			self._emu.fatal(e.args)
+
 		return M68K_IRQ_SPURIOUS
+
 
 	def check_interrupts(self):
 		ipl = 0
@@ -203,14 +211,8 @@ class uart(device):
 		elif mode == device.MODE_WRITE:
 			if addr == self._registers['DR']:
 				self.trace('write', '{}'.format(chr(value).__repr__()))
-				# XXX this is a bit hokey...
-				try:
-					sys.stdout.write(chr(value))
-					sys.stdout.flush()
-				except KeyboardInterrupt:
-					raise KeyboardInterrupt
-				except Exception:
-					pass
+				sys.stdout.write(chr(value))
+				sys.stdout.flush()
 
 		return value
 

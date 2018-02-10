@@ -3,7 +3,7 @@
 # A M68K emulator for development purposes
 #
 
-import os, argparse, subprocess, time, curses
+import os, argparse, subprocess, time, curses, sys, signal
 
 import device
 import imageELF
@@ -94,7 +94,8 @@ class emulator(object):
 	def __init__(self, image_filename, memory_size, trace_filename, device_base):
 
 		self._dead = False
-		self._interrupted = False
+		self._first_interrupt_time = 0.0
+		self._interrupt_count = 0
 
 		# initialise tracing
 		self._trace_file = open(trace_filename, "w")
@@ -159,21 +160,20 @@ class emulator(object):
 
 
 	def run(self, cycle_limit = float('inf')):
+		signal.signal(signal.SIGINT, self._keyboard_interrupt)
+
 		self._cycle_limit = cycle_limit
 		while not self._dead:
-			try:
-				start_time = time.time()
-				self._root_device.tick(self.current_time)
-				self._elapsed_cycles += execute(self._quantum)
-				self._elapsed_time += time.time() - start_time
-			except KeyboardInterrupt:
-				self._keyboard_interrupt()
+			start_time = time.time()
+			self._root_device.tick(self.current_time)
+			self._elapsed_cycles += execute(self._quantum)
+			self._elapsed_time += time.time() - start_time
 
 			if mem_is_end():
-				self._fatal('illegal memory access')
+				self.fatal('illegal memory access')
 
 			if self._elapsed_cycles > self._cycle_limit:
-				self._fatal('cycle limit exceeded')
+				self.fatal('cycle limit exceeded')
 
 		raise RuntimeError('terminating: {}'.format(self._postmortem))
 
@@ -287,49 +287,42 @@ class emulator(object):
 		"""
 		Handle an invalid memory access
 		"""
-		try:
-			if mode == M68K_MODE_WRITE:
-				cause = 'write to'
-			else:
-				cause = 'read from'
-		
-			self.trace('BUS ERROR', addr, self._image.lineinfo(get_reg(M68K_REG_PPC)))
-			self._fatal('BUS ERROR during {} 0x{:08x} - invalid memory'.format(cause, addr))
-
-		except KeyboardInterrupt:
-			self._keyboard_interrupt()
+		if mode == M68K_MODE_WRITE:
+			cause = 'write to'
+		else:
+			cause = 'read from'
+	
+		self.trace('BUS ERROR', addr, self._image.lineinfo(get_reg(M68K_REG_PPC)))
+		self.fatal('BUS ERROR during {} 0x{:08x} - invalid memory'.format(cause, addr))
 
 
 	def cb_trace_memory(self, mode, width, addr, value):
 		"""
 		Cut a memory trace entry
 		"""
-		try:
-			# don't trace immediate fetches, since they are described by 
-			# instruction tracing
-			if mode == M68K_MODE_FETCH:
-				return 0
-			elif mode == M68K_MODE_READ:
-				if not self._trace_memory and addr in self._trace_read_triggers:
-					self._trace_trigger(addr, 'memory', ['memory'])
-				direction = 'READ'
-			elif mode == M68K_MODE_WRITE:
-				if not self._trace_memory and addr in self._trace_write_triggers:
-					self._trace_trigger(addr, 'memory', ['memory'])
-				direction = 'WRITE'
 
-			if self._trace_memory:			
-				if width == 0:
-					info = '{:#04x}'.format(value)
-				elif width == 1:
-					info = '{:#06x}'.format(value)
-				elif width == 2:
-					info = '{:#010x}'.format(value)
-			
-				self.trace(direction, addr, info)
+		# don't trace immediate fetches, since they are described by 
+		# instruction tracing
+		if mode == M68K_MODE_FETCH:
+			return 0
+		elif mode == M68K_MODE_READ:
+			if not self._trace_memory and addr in self._trace_read_triggers:
+				self._trace_trigger(addr, 'memory', ['memory'])
+			direction = 'READ'
+		elif mode == M68K_MODE_WRITE:
+			if not self._trace_memory and addr in self._trace_write_triggers:
+				self._trace_trigger(addr, 'memory', ['memory'])
+			direction = 'WRITE'
 
-		except KeyboardInterrupt:
-			self._keyboard_interrupt()
+		if self._trace_memory:			
+			if width == 0:
+				info = '{:#04x}'.format(value)
+			elif width == 1:
+				info = '{:#06x}'.format(value)
+			elif width == 2:
+				info = '{:#010x}'.format(value)
+		
+			self.trace(direction, addr, info)
 
 		return 0
 
@@ -338,37 +331,31 @@ class emulator(object):
 		"""
 		Cut an instruction trace entry
 		"""
-		try:
-			pc = get_reg(M68K_REG_PC)
-			if not self._trace_instructions and pc in self._trace_instruction_triggers:
-					self._trace_trigger(pc, 'instruction', ['instructions', 'jumps'])
+		pc = get_reg(M68K_REG_PC)
+		if not self._trace_instructions and pc in self._trace_instruction_triggers:
+				self._trace_trigger(pc, 'instruction', ['instructions', 'jumps'])
 
-			if self._trace_instructions:
-				dis = disassemble(pc, self._cpu_type)
-				info = ''
-				for reg in self.registers:
-					if dis.find(reg) is not -1:
-						info += ' {}={:#x}'.format(reg, get_reg(self.registers[reg]))
-			
-				self.trace('EXECUTE', pc, '{:30} {}'.format(dis, info))
+		if self._trace_instructions:
+			dis = disassemble(pc, self._cpu_type)
+			info = ''
+			for reg in self.registers:
+				if dis.find(reg) is not -1:
+					info += ' {}={:#x}'.format(reg, get_reg(self.registers[reg]))
+		
+			self.trace('EXECUTE', pc, '{:30} {}'.format(dis, info))
+			return
 
-		except KeyboardInterrupt:
-			self._keyboard_interrupt()
 
 
 	def cb_trace_reset(self):
 		"""
 		Trace reset instructions
 		"""
-		try:
-			# might want to end here due to memory issues
-			end_timeslice()
+		# might want to end here due to memory issues
+		end_timeslice()
 
-			# devices must reset
-			self._root_device.reset()
-	
-		except KeyboardInterrupt:
-			self._keyboard_interrupt()
+		# devices must reset
+		self._root_device.reset()
 
 
 	def cb_trace_jump(self, new_pc, vector):
@@ -376,28 +363,36 @@ class emulator(object):
 		Cut a jump trace entry, called when the PC changes significantly, usually
 		a function call, return or exception
 		"""
-		try:
-			if vector == 0:
-				if self._trace_jumps:
-					self.trace('JUMP', new_pc, self._image.lineinfo(new_pc))
+		if vector == 0:
+			if self._trace_jumps:
+				self.trace('JUMP', new_pc, self._image.lineinfo(new_pc))
 
 # should be optional, breaks trampolines...
 #				if self._check_PC_in_text:
 #					if not self._image.check_text(new_pc):
-#						self._fatal('PC {:#x} not in .text'.format(new_pc))
-			else:
-				if vector in self._trace_exception_list:
-					ppc = get_reg(M68K_REG_PPC)
-					self.trace('EXCEPTION', ppc, 'vector {:#x} to {}'.format(vector, self._image.lineinfo(new_pc)))
-
-		except KeyboardInterrupt:
-			self._keyboard_interrupt()
+#						self.fatal('PC {:#x} not in .text'.format(new_pc))
+		else:
+			if vector in self._trace_exception_list:
+				ppc = get_reg(M68K_REG_PPC)
+				self.trace('EXCEPTION', ppc, 'vector {:#x} to {}'.format(vector, self._image.lineinfo(new_pc)))
 
 
-	def _keyboard_interrupt(self):
-		self._fatal('user interrupt')
+	def _keyboard_interrupt(self, signal = None, frame = None):
+		now = time.time()
+		interval = now - self._first_interrupt_time
 
-	def _fatal(self, reason):
+		if interval >= 1.0:
+			self._first_interrupt_time = now
+			self._interrupt_count = 1
+		else:
+			self._interrupt_count += 1
+			if self._interrupt_count >= 3:
+				self.fatal('user interrupt')
+
+		self._root_device.console_input(3)
+
+
+	def fatal(self, reason):
 		self._dead = True
 		self._postmortem = reason
 		end_timeslice()
