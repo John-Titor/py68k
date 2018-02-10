@@ -381,9 +381,10 @@ class emulator(object):
 				if self._trace_jumps:
 					self.trace('JUMP', new_pc, self._image.lineinfo(new_pc))
 
-				if self._check_PC_in_text:
-					if not self._image.check_text(new_pc):
-						self._fatal('PC {:#x} not in .text'.format(new_pc))
+# should be optional, breaks trampolines...
+#				if self._check_PC_in_text:
+#					if not self._image.check_text(new_pc):
+#						self._fatal('PC {:#x} not in .text'.format(new_pc))
 			else:
 				if vector in self._trace_exception_list:
 					ppc = get_reg(M68K_REG_PPC)
