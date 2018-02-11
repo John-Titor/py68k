@@ -141,6 +141,122 @@ class Channel():
 		self.update_status()
 		self._parent.update_status()
 
+class Counter():
+
+	MODE_MASK 		= 0x70
+	MODE_CTR_XTAL16		= 0x30
+	MODE_TMR_XTAL		= 0x60
+	MODE_TMR_XTAL16		= 0x70
+
+	def __init__(self, parent):
+		self._parent = parent
+		self._last_tick_cyclecount = 0
+		self._counter_reload = 0x0100
+		self._interrupting = False
+
+		self.set_mode(Counter.MODE_TMR_XTAL16)
+		self._counter_epoch = self._parent.current_cycle + self._period
+
+	def set_mode(self, mode):
+		mode &= Counter.MODE_MASK
+		if mode == Counter.MODE_CTR_XTAL16:
+			self._prescale = 16
+		elif mode == Counter.MODE_TMR_XTAL:
+			self._prescale = 1
+		elif mode == Counter.MODE_TMR_XTAL16:
+			self._prescale = 16
+		else:
+			raise RuntimeError('timer mode 0x{:02x} not supported'.format(mode))
+
+		self._mode = mode
+		if self._mode_is_timer:
+			self._running = True
+			self._timer_toggle = 0
+
+	def set_reload_low(self, value):
+		self._counter_reload = (self._counter_reload & 0xff00) | value
+
+	def set_reload_high(self, value):
+		self._counter_reload = (self._counter_reload & 0x00ff) | (value << 8)
+
+	def start(self):
+		self._counter_epoch = self._parent.current_cycle + self._counter_reload * self._clock_scale_factor
+		self._running = True
+
+		if self._mode_is_timer:
+			self._timer_toggle = 0
+
+	def stop(self):
+		self._interrupting = False
+
+		if self._mode_is_counter:
+			self._running = False		
+
+	def get_counter(self):
+		# handle possibly passing the counter epoch; guarantees the epoch is in the future
+		self.tick()
+
+		cycles_remaining = self._counter_epoch - self.current_cycle
+		return int(round(cycles_remaining / self._clock_scale_factor))
+
+	@property
+	def is_interrupting(self):
+		return self._interrupting
+
+	def tick(self):
+		"""
+		Adjust the state of the counter up to the current time
+		"""
+
+		# do nothing if we're not running
+		if not self._running:
+			return 0
+
+		current_cycle = self._parent.current_cycle
+		if current_cycle >= self._counter_epoch:
+			if self._mode_is_counter:
+				self._interrupting = True
+			else:
+				if self._timer_toggle == 0:
+					self._timer_toggle = 1
+				else:
+					self._timer_toggle = 0
+					self._interrupting = 1
+
+			periods_since_epoch = (current_cycle - self._counter_epoch) / self._period
+			self._parent.trace('update', 'late {} period {} since epoch {}'.format(current_cycle - self._counter_epoch,
+											       self._period,
+											       periods_since_epoch))
+			self._counter_epoch = self._counter_epoch + (periods_since_epoch + 1) * self._period
+
+		self._parent.trace('tick', 'at {} deadline {} limit {}'.format(current_cycle, self._counter_epoch, self._counter_epoch - current_cycle))
+
+		# limit the next quantum to the deadline
+		return self._counter_epoch - current_cycle
+
+	@property
+	def _period(self):
+		if self._mode_is_counter:
+			# counter wraps to 0xffff
+			value = 0x10000 * self._clock_scale_factor
+		else:
+			# timer wraps to reload value
+			value = self._counter_reload * self._clock_scale_factor
+		return int(round(value))
+
+	@property
+	def _mode_is_counter(self):
+		return self._mode < 0x40
+
+	@property
+	def _mode_is_timer(self):
+		return not self._mode_is_counter
+
+	@property
+	def _clock_scale_factor(self):
+		return (self._parent.cycle_rate / 3.6) * self._prescale
+
+
 
 
 class DUART(device):
@@ -187,17 +303,13 @@ class DUART(device):
 		'STOPCC/OPRCLR' : 0x1f
 	}
 
-	ACR_MODE_MASK 		= 0x70
-	ACR_MODE_CTR_XTAL	= 0x30
-	ACR_MODE_TMR_XTAL	= 0x60
-	ACR_MODE_TMR_XTAL16	= 0x70
-
 	def __init__(self, address, interrupt, debug):
 		super(DUART, self).__init__('DUART', address = address, interrupt = interrupt, debug = debug)
 		self.map_registers(DUART._registers)
 
-		self._a = Channel(self);
-		self._b = Channel(self);
+		self._a = Channel(self)
+		self._b = Channel(self)
+		self._counter = Counter(self)
 		self.reset()
 		self.trace('init done')
 
@@ -220,10 +332,10 @@ class DUART(device):
 				value = self._isr
 
 			elif offset == DUART.REG_CUR:
-				value = self._count >> 8
+				value = self._counter.get_count() >> 8
 
 			elif offset == DUART.REG_CLR:
-				value = self._count & 0xff
+				value = self._counter.get_count() & 0xff
 
 			elif offset == DUART.REG_IVR:
 				value = self._ivr
@@ -232,20 +344,22 @@ class DUART(device):
 				value = 0x03	# CTSA/CTSB are always asserted
 
 			elif offset == DUART.REG_STARTCC:
-				self._count = self._countReload
-
-			elif offset == DUART.REG_STOPCC:
-				pass
-
-			else:
+				self._counter.start()
 				value = 0xff
 
+			elif offset == DUART.REG_STOPCC:
+				self._counter.stop()
+				value = 0xff
+
+			else:
+				raise RuntimeError('read from 0x{:02x} not handled'.format(offset))
+
 			regname = self.get_register_name(offset).split('/')[0]
-			self.trace('{} -> 0x{:02x}'.format(regname, value))
+			self.trace(regname, '-> 0x{:02x}'.format(value))
 
 		elif mode == device.MODE_WRITE:
 			regname = self.get_register_name(offset).split('/')[-1]
-			self.trace('{} <- 0x{:02x}'.format(regname, value))
+			self.trace(regname, '<- 0x{:02x}'.format(value))
 
 			regsel = offset & DUART.REG_SELMASK
 			if regsel == DUART.REG_SEL_A:
@@ -255,32 +369,38 @@ class DUART(device):
 				self._b.access(mode, offset - DUART.REG_SEL_B, value);
 
 			elif offset == DUART.REG_ACR:
-				self._acr = value
+				self._counter.set_mode(value)
 
 			elif offset == DUART.REG_IMR:
 				self._imr = value
 				# XXX interrupt status may have changed...
 
 			elif offset == DUART.REG_CTUR:
-				self._countReload = (value << 8) + (self._countReload & 0xff)
+				self._counter.set_reload_high(value)
 
 			elif offset == DUART.REG_CTLR:
-				self._countReload = (self._countReload & 0xff00) + value
+				self._counter.set_reload_low(value)
 
 			elif offset == DUART.REG_IVR:
 				self._ivr = value
 
-			#elif offset == DUART.REG_OPCR:
-			#elif offset == DUART.REG_OPRSET:
-			#elif offset == DUART.REG_OPRCLR:
-			pass
+			elif offset == DUART.REG_OPCR:
+				pass
+			elif offset == DUART.REG_OPRSET:
+				pass
+			elif offset == DUART.REG_OPRCLR:
+				pass
+			else:
+				raise RuntimeError('write to 0x{:02x} not handled'.format(offset))
 
 		self.update_status()
 
 		return value
 
-	def tick(self, current_time):
+	def tick(self):
+		quantum = self._counter.tick()
 		self.update_status()
+		return quantum
 
 	def reset(self):
 		self._a.reset()
@@ -290,7 +410,6 @@ class DUART(device):
 		self._ivr = 0xf
 		self._count = 0
 		self._countReload = 0xffff
-		self._acr = DUART.ACR_MODE_TMR_XTAL
 
 	def get_interrupt(self):
 		if self._isr & self._imr:
@@ -303,7 +422,9 @@ class DUART(device):
 		return M68K_IRQ_SPURIOUS
 
 	def update_status(self):
-		self._isr &= ~0x33
+		self._isr &= ~0x3b
+		if self._counter.is_interrupting:
+			self._isr |= 0x08
 		self._isr |= self._a.get_interrupts() 
 		self._isr |= self._b.get_interrupts() << 4
 

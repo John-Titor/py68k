@@ -61,7 +61,7 @@ class device(object):
 		if self._debug:
 			device._emu.trace('DEVICE', info='{}: {} {}'.format(self._name, action, info))
 
-	def tick(self, current_time):
+	def tick(self, elapsed_cycles, current_time):
 		return 0
 
 	def reset(self):
@@ -75,6 +75,18 @@ class device(object):
 
 	def get_register_name(self, offset):
 		return self._register_name_map[offset]
+
+	@property
+	def current_time(self):
+		return self.root_device._emu.current_time
+
+	@property
+	def current_cycle(self):
+		return self.root_device._emu.current_cycle
+
+	@property
+	def cycle_rate(self):
+		return self.root_device._emu.cpu_frequency
 
 
 class root_device(device):
@@ -119,10 +131,10 @@ class root_device(device):
 		new_dev = dev(address = address, interrupt = interrupt, debug = debug)
 		device._devices.append(new_dev)
 
-	def tick(self, current_time):
+	def tick(self):
 		deadline = 0
 		for dev in device._devices:
-			ret = dev.tick(current_time)
+			ret = dev.tick()
 			if ret > 0 and (deadline == 0 or ret < deadline):
 				deadline = ret
 

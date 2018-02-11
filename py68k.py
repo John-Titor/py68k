@@ -12,6 +12,7 @@ import imageBIN
 from musashi.m68k import (
 	cpu_init,
 	disassemble,
+	cycles_run,
 	end_timeslice,
 	execute,
 	get_reg,
@@ -118,9 +119,8 @@ class emulator(object):
 
 		# time
 		self._elapsed_cycles = 0
-		self._elapsed_time = 0
 		self._device_deadline = 0
-		self._quantum = self.cpu_frequency * 100
+		self._quantum = self.cpu_frequency * 1000 # 1ms
 
 		# intialise the CPU
 		self._cpu_type = M68K_CPU_TYPE_68000
@@ -165,9 +165,11 @@ class emulator(object):
 		self._cycle_limit = cycle_limit
 		while not self._dead:
 			start_time = time.time()
-			self._root_device.tick(self.current_time)
-			self._elapsed_cycles += execute(self._quantum)
-			self._elapsed_time += time.time() - start_time
+			cycles_to_run = self._root_device.tick()
+			if (cycles_to_run == 0) or (cycles_to_run > self._quantum):
+				cycles_to_run = self._quantum
+			self.trace('running quantum {}'.format(cycles_to_run))
+			self._elapsed_cycles += execute(cycles_to_run)
 
 			if mem_is_end():
 				self.fatal('illegal memory access')
@@ -179,9 +181,9 @@ class emulator(object):
 
 
 	def finish(self):
-		self.trace('', info = '{} cycles in {} seconds, {} cps'.format(self._elapsed_cycles,
-									       self._elapsed_time,
-							                       int(self._elapsed_cycles / self._elapsed_time)))
+		self.trace('', info = '{} cycles in {} seconds, {} cps'.format(self.current_cycle,
+									       self.current_time,
+							                       int(self.current_cycles / self.current_time)))
 
 		try:
 			self._trace_file.flush()
@@ -199,7 +201,17 @@ class emulator(object):
 
 	@property
 	def current_time(self):
-		return self._elapsed_cycles / self.cpu_frequency
+		"""
+		Return the current time in microseconds since reset
+		"""
+		return self.current_cycle / self.cpu_frequency
+
+	@property
+	def current_cycle(self):
+		"""
+		Return the number of the current clock cycle (cycles elapsed since reset)
+		"""
+		return self._elapsed_cycles + cycles_run()
 
 
 	def trace_enable(self, what, option=None):

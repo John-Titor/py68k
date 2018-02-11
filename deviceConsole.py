@@ -53,7 +53,7 @@ class Console(device):
 		self.trace('out ' + self._fmt(output))
 		Console.stdscr.echochar(chr(output))
 
-	def tick(self, current_time):
+	def tick(self):
 		Console.stdscr.refresh()
 		input = Console.stdscr.getch()
 		if input != -1:
