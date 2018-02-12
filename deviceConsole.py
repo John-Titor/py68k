@@ -9,7 +9,6 @@ class Console(device):
 
     # VT100 and a smattering of later DEC encodings
     input_keymap = {
-        10 : '\x0d',
         127 : '\x08',
         curses.KEY_DOWN : '\x1bB',
         curses.KEY_UP : '\x1bA',
@@ -33,10 +32,10 @@ class Console(device):
         Console.stdscr.nodelay(1)
         Console.stdscr.scrollok(1)
         Console.stdscr.idlok(1)
+        curses.nonl()
 
     def _fmt(self, val):
-        str = '{}'.format(val)
-        # XXX need to handle this better, maybe curses can help?
+        str = '0x{:02x}'.format(val)
         try:
             ch = chr(val)
             if ch.isalnum():
