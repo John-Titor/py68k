@@ -48,7 +48,6 @@ class Console(device):
 		self.trace('in ' + self._fmt(input))
 		device.root_device.console_input(input)
 
-
 	def handle_console_output(self, output):
 		self.trace('out ' + self._fmt(output))
 		Console.stdscr.echochar(chr(output))

@@ -141,21 +141,35 @@ class root_device(device):
 		device._device_base = address
 		device.root_device = self
 
-		set_int_ack_callback(self.int_callback)
-		mem_set_device_handler(self.access_callback)
+		set_int_ack_callback(self.cb_int)
+		mem_set_device_handler(self.cb_access)
 
-	def access_callback(self, mode, width, address, value):
-		#self.trace('access', '{}'.format(address))
-		#self.trace('mappings', device._register_to_device)
+	def cb_int(self, interrupt):
+		try:
+			for dev in device._devices:
+				vector = dev.get_vector(interrupt)
+				if vector != M68K_IRQ_SPURIOUS:
+					self.trace('{} returns vector 0x{:x}'.format(dev._name, vector))
+					return vector
+			self.trace('no interrupting device')
+		except:
+			self._emu.fatal_exception(sys.exc_info())
 
-		# look for a device
-		if address not in device._register_to_device:
-			self.trace('lookup', 'failed to find device to handle access')
-			device._emu.cb_buserror(mode, width, address)
-			return 0
+		return M68K_IRQ_SPURIOUS
+
+	def cb_access(self, mode, width, address, value):
+
+		try:
+			#self.trace('access', '{}'.format(address))
+			#self.trace('mappings', device._register_to_device)
+
+			# look for a device
+			if address not in device._register_to_device:
+				self.trace('lookup', 'failed to find device to handle access')
+				device._emu.cb_buserror(mode, width, address)
+				return 0
 		
 		# dispatch to device emulator
-		try:
 			offset = address - device._device_base
 			dev = device._register_to_device[address]
 			if chr(mode) == device.MODE_READ:
@@ -164,7 +178,7 @@ class root_device(device):
 				dev.write(width, offset, value)
 			self.check_interrupts()
 		except Exception as e:
-			self._emu.fatal_exception(e)
+			self._emu.fatal_exception(sys.exc_info())
 
 		return value
 
@@ -190,20 +204,6 @@ class root_device(device):
 	def reset(self):
 		for dev in device._devices:
 			dev.reset()
-
-	def int_callback(self, interrupt):
-		try:
-			for dev in device._devices:
-				vector = dev.get_vector(interrupt)
-				if vector != M68K_IRQ_SPURIOUS:
-					self.trace('{} returns vector 0x{:x}'.format(dev._name, vector))
-					return vector
-			self.trace('no interrupting device')
-		except Exception as e:
-			self._emu.fatal_exception(e)
-
-		return M68K_IRQ_SPURIOUS
-
 
 	def check_interrupts(self):
 		ipl = 0

@@ -3,7 +3,7 @@
 # A M68K emulator for development purposes
 #
 
-import os, argparse, subprocess, time, curses, sys, signal
+import os, argparse, subprocess, time, curses, sys, signal, traceback
 
 import device
 import imageELF
@@ -95,7 +95,8 @@ class emulator(object):
 	def __init__(self, image_filename, memory_size, trace_filename, device_base):
 
 		self._dead = False
-		self._exception = None
+		self._exception_info = None
+		self._postmortem = None
 		self._first_interrupt_time = 0.0
 		self._interrupt_count = 0
 
@@ -121,7 +122,7 @@ class emulator(object):
 		# time
 		self._elapsed_cycles = 0
 		self._device_deadline = 0
-		self._quantum = self.cpu_frequency * 1000
+		self._quantum = self.cpu_frequency * 1000 # ~1ms
 
 		# intialise the CPU
 		self._cpu_type = M68K_CPU_TYPE_68000
@@ -143,6 +144,7 @@ class emulator(object):
 
 		# reset the CPU ready for execution
 		pulse_reset()
+
 
 	def loadImage(self, image_filename):
 		try:
@@ -172,12 +174,10 @@ class emulator(object):
 			self._elapsed_cycles += execute(cycles_to_run)
 
 			if mem_is_end():
-				raise RuntimeError('illegal memory access')
+				self.fatal('illegal memory access')
 
 			if self._elapsed_cycles > self._cycle_limit:
-				raise RuntimeError('cycle limit exceeded')
-
-		raise self._exception
+				self.fatal('cycle limit exceeded')
 
 
 	def finish(self):
@@ -206,6 +206,7 @@ class emulator(object):
 		Return the current time in microseconds since reset
 		"""
 		return self.current_cycle / self.cpu_frequency
+
 
 	@property
 	def current_cycle(self):
@@ -267,6 +268,7 @@ class emulator(object):
 		else:
 			raise RuntimeError('bad tracing option {}'.format(what))
 
+
 	def trace(self, action, address=None, info=''):
 
 		if address is not None:
@@ -306,36 +308,38 @@ class emulator(object):
 			cause = 'read from'
 	
 		self.trace('BUS ERROR', addr, self._image.lineinfo(get_reg(M68K_REG_PPC)))
-		self.fatal_exception(RuntimeError('BUS ERROR during {} 0x{:08x} - invalid memory'.format(cause, addr)))
+		self.fatal('BUS ERROR during {} 0x{:08x} - invalid memory'.format(cause, addr))
 
 
 	def cb_trace_memory(self, mode, width, addr, value):
 		"""
 		Cut a memory trace entry
 		"""
+		try:
+			# don't trace immediate fetches, since they are described by 
+			# instruction tracing
+			if mode == M68K_MODE_FETCH:
+				return 0
+			elif mode == M68K_MODE_READ:
+				if not self._trace_memory and addr in self._trace_read_triggers:
+					self._trace_trigger(addr, 'memory', ['memory'])
+				direction = 'READ'
+			elif mode == M68K_MODE_WRITE:
+				if not self._trace_memory and addr in self._trace_write_triggers:
+					self._trace_trigger(addr, 'memory', ['memory'])
+				direction = 'WRITE'
 
-		# don't trace immediate fetches, since they are described by 
-		# instruction tracing
-		if mode == M68K_MODE_FETCH:
-			return 0
-		elif mode == M68K_MODE_READ:
-			if not self._trace_memory and addr in self._trace_read_triggers:
-				self._trace_trigger(addr, 'memory', ['memory'])
-			direction = 'READ'
-		elif mode == M68K_MODE_WRITE:
-			if not self._trace_memory and addr in self._trace_write_triggers:
-				self._trace_trigger(addr, 'memory', ['memory'])
-			direction = 'WRITE'
-
-		if self._trace_memory:			
-			if width == 0:
-				info = '{:#04x}'.format(value)
-			elif width == 1:
-				info = '{:#06x}'.format(value)
-			elif width == 2:
-				info = '{:#010x}'.format(value)
-		
-			self.trace(direction, addr, info)
+			if self._trace_memory:			
+				if width == 0:
+					info = '{:#04x}'.format(value)
+				elif width == 1:
+					info = '{:#06x}'.format(value)
+				elif width == 2:
+					info = '{:#010x}'.format(value)
+			
+				self.trace(direction, addr, info)
+		except:
+			self.fatal_exception(sys.exc_info())
 
 		return 0
 
@@ -344,20 +348,22 @@ class emulator(object):
 		"""
 		Cut an instruction trace entry
 		"""
-		pc = get_reg(M68K_REG_PC)
-		if not self._trace_instructions and pc in self._trace_instruction_triggers:
-				self._trace_trigger(pc, 'instruction', ['instructions', 'jumps'])
+		try:
+			pc = get_reg(M68K_REG_PC)
+			if not self._trace_instructions and pc in self._trace_instruction_triggers:
+					self._trace_trigger(pc, 'instruction', ['instructions', 'jumps'])
 
-		if self._trace_instructions:
-			dis = disassemble(pc, self._cpu_type)
-			info = ''
-			for reg in self.registers:
-				if dis.find(reg) is not -1:
-					info += ' {}={:#x}'.format(reg, get_reg(self.registers[reg]))
-		
-			self.trace('EXECUTE', pc, '{:30} {}'.format(dis, info))
-			return
-
+			if self._trace_instructions:
+				dis = disassemble(pc, self._cpu_type)
+				info = ''
+				for reg in self.registers:
+					if dis.find(reg) is not -1:
+						info += ' {}={:#x}'.format(reg, get_reg(self.registers[reg]))
+			
+				self.trace('EXECUTE', pc, '{:30} {}'.format(dis, info))
+				return
+		except:
+				self.fatal_exception(sys.exc_info())
 
 
 	def cb_trace_reset(self):
@@ -368,7 +374,10 @@ class emulator(object):
 		end_timeslice()
 
 		# devices must reset
-		self._root_device.reset()
+		try:
+			self._root_device.reset()
+		except:
+			self.fatal_exception(sys.exc_info())
 
 
 	def cb_trace_jump(self, new_pc, vector):
@@ -376,13 +385,16 @@ class emulator(object):
 		Cut a jump trace entry, called when the PC changes significantly, usually
 		a function call, return or exception
 		"""
-		if vector == 0:
-			if self._trace_jumps:
-				self.trace('JUMP', new_pc, self._image.lineinfo(new_pc))
-		else:
-			if vector in self._trace_exception_list:
-				ppc = get_reg(M68K_REG_PPC)
-				self.trace('EXCEPTION', ppc, 'vector {:#x} to {}'.format(vector, self._image.lineinfo(new_pc)))
+		try:
+			if vector == 0:
+				if self._trace_jumps:
+					self.trace('JUMP', new_pc, self._image.lineinfo(new_pc))
+			else:
+				if vector in self._trace_exception_list:
+					ppc = get_reg(M68K_REG_PPC)
+					self.trace('EXCEPTION', ppc, 'vector {:#x} to {}'.format(vector, self._image.lineinfo(new_pc)))
+		except:
+			self.fatal_exception(sys.exc_info())
 
 
 	def _keyboard_interrupt(self, signal = None, frame = None):
@@ -395,15 +407,36 @@ class emulator(object):
 		else:
 			self._interrupt_count += 1
 			if self._interrupt_count >= 3:
-				self.fatal_exception(KeyboardInterrupt())
+				self.fatal('Exit due to user interrupt.')
 
 		self._root_device.console_input(3)
 
 
-	def fatal_exception(self, exception):
+	def fatal_exception(self, exception_info):
+		"""
+		Call from within a callback handler to register a fatal exception
+		"""
 		self._dead = True
-		self._exception = exception
+		self._exception_info = exception_info
 		end_timeslice()
+
+
+	def fatal(self, reason):
+		"""
+		Call from within a callback handler etc. to cause the emulation to exit
+		"""
+		self._dead = True
+		self._postmortem = reason
+		end_timeslice()
+
+
+	def fatal_info(self):
+		if self._postmortem is not None:
+			return self._postmortem
+		elif self._exception_info is not None:
+			return traceback.format_exception(self._exception_info)
+		else:
+			return 'no reason'
 
 
 def configure(args, stdscr):
@@ -533,12 +566,10 @@ def run_emu(stdscr, args):
 		emu.trace_enable('check-pc-in-text')
 
 	# run some instructions
-	try:
-		emu.run(args.cycle_limit)
-	except:
-		print 'exe'
+	emu.run(args.cycle_limit)
 
 	emu.finish()
+	return emu.fatal_info()
 
-curses.wrapper(run_emu, args)
+print curses.wrapper(run_emu, args)
 
