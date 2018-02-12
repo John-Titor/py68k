@@ -320,13 +320,15 @@ class timer(device):
 
 		return value
 
-	def tick(self, current_time):
 
+
+	def tick(self):
 		# do nothing if we are disabled
 		if self._reload == 0:
 			return 0
 
 		# how much time has elapsed?
+		current_time = self.current_time
 		delta = (current_time - self._last_update) % self._reload
 		self._last_update = current_time
 
