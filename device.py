@@ -54,24 +54,15 @@ class device(object):
 				if self != other:
 					raise RuntimeError('register at {} already assigned to {}'.format(regaddr, other._name))
 			device._register_to_device[regaddr] = self
-			device._emu.trace('DEVICE', address = regaddr, info='add register {}/0x{:x} for {}'.format(reg, registers[reg], self._name))
+#			device._emu.trace('DEVICE', address = regaddr, info='add register {}/0x{:x} for {}'.format(reg, registers[reg], self._name))
 			self._register_name_map[registers[reg]] = reg
 
 	def trace(self, action, info=''):
+		"""
+		Emit a debug trace message
+		"""
 		if self._debug:
 			device._emu.trace('DEVICE', info='{}: {} {}'.format(self._name, action, info))
-
-	def tick(self, elapsed_cycles, current_time):
-		return 0
-
-	def reset(self):
-		return
-
-	def get_interrupt(self):
-		return 0
-
-	def get_vector(self):
-		return M68K_IRQ_SPURIOUS
 
 	def get_register_name(self, offset):
 		return self._register_name_map[offset]
@@ -87,6 +78,56 @@ class device(object):
 	@property
 	def cycle_rate(self):
 		return self.root_device._emu.cpu_frequency
+
+
+	#
+	# Methods that should be implemented by device models
+	#
+
+	def read(self, width, offset):
+		"""
+		Called when a CPU read access decodes to one of the registers defined in a call to map_registers.
+		width is one of device.WIDTH_8, device.WIDTH_16 or device.WIDTH_32
+		offset is the register offset from the device base address
+		Function should return the read value.
+		"""
+		return 0
+
+	def write(self, width, offset, value):
+		"""
+		Called when a CPU write access decodes to one of the registers defined in a call to map_registers.
+		width is one of device.WIDTH_8, device.WIDTH_16 or device.WIDTH_32
+		offset is the register offset from the device base address
+		value is the value being written
+		"""
+		pass
+
+	def tick(self, elapsed_cycles, current_time):
+		"""
+		Called every emulator tick
+		"""
+		return 0
+
+	def reset(self):
+		"""
+		Called at emulator reset time
+		"""
+		return
+
+	def get_interrupt(self):
+		"""
+		Called to determine whether the device is interrupting; should return the device
+		IPL if interrupting or 0 if not.
+		"""
+		return 0
+
+	def get_vector(self):
+		"""
+		Called during the interrupt acknowledge phase. Should return a programmed vector or
+		M68K_IRQ_AUTOVECTOR as appropriate if the device is interrupting, or M68K_IRQ_SPURIOUS
+		otherwise.
+		"""
+		return M68K_IRQ_SPURIOUS
 
 
 class root_device(device):
