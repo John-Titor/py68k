@@ -119,7 +119,8 @@ class root_device(device):
 			value = device._register_to_device[address].access(chr(mode), width, offset, value)
 			self.check_interrupts()
 		except Exception as e:
-			self._emu.fatal(e.args)
+			self._emu.fatal_exception(e)
+
 		return value
 
 	def add_device(self, dev, address = None, interrupt = None, debug = False):
@@ -154,7 +155,7 @@ class root_device(device):
 					return vector
 			self.trace('no interrupting device')
 		except Exception as e:
-			self._emu.fatal(e.args)
+			self._emu.fatal_exception(e)
 
 		return M68K_IRQ_SPURIOUS
 

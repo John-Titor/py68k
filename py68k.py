@@ -95,6 +95,7 @@ class emulator(object):
 	def __init__(self, image_filename, memory_size, trace_filename, device_base):
 
 		self._dead = False
+		self._exception = None
 		self._first_interrupt_time = 0.0
 		self._interrupt_count = 0
 
@@ -120,7 +121,7 @@ class emulator(object):
 		# time
 		self._elapsed_cycles = 0
 		self._device_deadline = 0
-		self._quantum = self.cpu_frequency * 1000 # 1ms
+		self._quantum = self.cpu_frequency * 1000
 
 		# intialise the CPU
 		self._cpu_type = M68K_CPU_TYPE_68000
@@ -162,28 +163,28 @@ class emulator(object):
 	def run(self, cycle_limit = float('inf')):
 		signal.signal(signal.SIGINT, self._keyboard_interrupt)
 
+		self._start_time = time.time()
 		self._cycle_limit = cycle_limit
 		while not self._dead:
-			start_time = time.time()
 			cycles_to_run = self._root_device.tick()
 			if (cycles_to_run == 0) or (cycles_to_run > self._quantum):
 				cycles_to_run = self._quantum
-			self.trace('running quantum {}'.format(cycles_to_run))
 			self._elapsed_cycles += execute(cycles_to_run)
 
 			if mem_is_end():
-				self.fatal('illegal memory access')
+				raise RuntimeError('illegal memory access')
 
 			if self._elapsed_cycles > self._cycle_limit:
-				self.fatal('cycle limit exceeded')
+				raise RuntimeError('cycle limit exceeded')
 
-		raise RuntimeError('terminating: {}'.format(self._postmortem))
+		raise self._exception
 
 
 	def finish(self):
-		self.trace('', info = '{} cycles in {} seconds, {} cps'.format(self.current_cycle,
-									       self.current_time,
-							                       int(self.current_cycles / self.current_time)))
+		elapsed_time = time.time() - self._start_time
+		self.trace('END', info = '{} cycles in {} seconds, {} cps'.format(self.current_cycle,
+									          elapsed_time,
+							                          int(self.current_cycle / elapsed_time)))
 
 		try:
 			self._trace_file.flush()
@@ -305,7 +306,7 @@ class emulator(object):
 			cause = 'read from'
 	
 		self.trace('BUS ERROR', addr, self._image.lineinfo(get_reg(M68K_REG_PPC)))
-		self.fatal('BUS ERROR during {} 0x{:08x} - invalid memory'.format(cause, addr))
+		self.fatal_exception(RuntimeError('BUS ERROR during {} 0x{:08x} - invalid memory'.format(cause, addr)))
 
 
 	def cb_trace_memory(self, mode, width, addr, value):
@@ -378,11 +379,6 @@ class emulator(object):
 		if vector == 0:
 			if self._trace_jumps:
 				self.trace('JUMP', new_pc, self._image.lineinfo(new_pc))
-
-# should be optional, breaks trampolines...
-#				if self._check_PC_in_text:
-#					if not self._image.check_text(new_pc):
-#						self.fatal('PC {:#x} not in .text'.format(new_pc))
 		else:
 			if vector in self._trace_exception_list:
 				ppc = get_reg(M68K_REG_PPC)
@@ -399,14 +395,14 @@ class emulator(object):
 		else:
 			self._interrupt_count += 1
 			if self._interrupt_count >= 3:
-				self.fatal('user interrupt')
+				self.fatal_exception(KeyboardInterrupt())
 
 		self._root_device.console_input(3)
 
 
-	def fatal(self, reason):
+	def fatal_exception(self, exception):
 		self._dead = True
-		self._postmortem = reason
+		self._exception = exception
 		end_timeslice()
 
 
@@ -432,14 +428,14 @@ def configure(args, stdscr):
 		emu.add_device(deviceDUART.DUART, 
 			       address = 0xfff000,
 			       interrupt = M68K_IRQ_2,
-			       debug = True)
+			       debug = False)
 
 	else:
 		raise RuntimeError('unsupported target: ' + args.target)
 
 	import deviceConsole
 	deviceConsole.Console.stdscr = stdscr
-	emu.add_device(deviceConsole.Console, debug = True)
+	emu.add_device(deviceConsole.Console, debug = False)
 
 	return emu
 
@@ -537,7 +533,10 @@ def run_emu(stdscr, args):
 		emu.trace_enable('check-pc-in-text')
 
 	# run some instructions
-	emu.run(args.cycle_limit)
+	try:
+		emu.run(args.cycle_limit)
+	except:
+		print 'exe'
 
 	emu.finish()
 
