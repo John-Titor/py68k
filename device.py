@@ -54,7 +54,7 @@ class device(object):
 				if self != other:
 					raise RuntimeError('register at {} already assigned to {}'.format(regaddr, other._name))
 			device._register_to_device[regaddr] = self
-#			device._emu.trace('DEVICE', address = regaddr, info='add register {}/0x{:x} for {}'.format(reg, registers[reg], self._name))
+			device._emu.trace('DEVICE', address = regaddr, info='add register {}/0x{:x} for {}'.format(reg, registers[reg], self._name))
 			self._register_name_map[registers[reg]] = reg
 
 	def trace(self, action, info=''):
@@ -65,7 +65,10 @@ class device(object):
 			device._emu.trace('DEVICE', info='{}: {} {}'.format(self._name, action, info))
 
 	def get_register_name(self, offset):
-		return self._register_name_map[offset]
+		if offset in self._register_name_map:
+			return self._register_name_map[offset]
+		else:
+			return '???@{}'.format(offset)
 
 	@property
 	def current_time(self):
@@ -102,7 +105,7 @@ class device(object):
 		"""
 		pass
 
-	def tick(self, elapsed_cycles, current_time):
+	def tick(self):
 		"""
 		Called every emulator tick
 		"""
@@ -135,11 +138,13 @@ class root_device(device):
 	_console_output_driver = None
 	_console_input_driver = None
 
-	def __init__(self, emu, address, debug = False):
+	def __init__(self, args, emu, address, debug = False):
 		super(root_device, self).__init__('root', address = address, debug = debug)
 		device._emu = emu
 		device._device_base = address
 		device.root_device = self
+
+		self._trace_io = args.trace_io or args.trace_everything
 
 		set_int_ack_callback(self.cb_int)
 		mem_set_device_handler(self.cb_access)
@@ -158,37 +163,56 @@ class root_device(device):
 		return M68K_IRQ_SPURIOUS
 
 	def cb_access(self, mode, width, address, value):
-
 		try:
-			#self.trace('access', '{}'.format(address))
-			#self.trace('mappings', device._register_to_device)
-
 			# look for a device
 			if address not in device._register_to_device:
 				self.trace('lookup', 'failed to find device to handle access')
 				device._emu.cb_buserror(mode, width, address)
 				return 0
 		
-		# dispatch to device emulator
-			offset = address - device._device_base
+			# dispatch to device emulator
 			dev = device._register_to_device[address]
+			offset = address - dev._address
 			if chr(mode) == device.MODE_READ:
 				value = dev.read(width, offset)
+
+				if self._trace_io:
+					label = "{}:{}".format(dev._name, dev.get_register_name(offset).split('/')[0])
+					if width == device.WIDTH_8:
+						str = '{} -> 0x{:02x}'.format(label, value)
+					elif width == device.WIDTH_16:
+						str = '{} -> 0x{:04x}'.format(label, value)
+					else:
+						str = '{} -> 0x{:08x}'.format(label, value)
+				device._emu.trace('DEV_READ', address = address, info = str)
+
 			else:
+				if self._trace_io:
+					label = "{}:{}".format(dev._name, dev.get_register_name(offset).split('/')[-1])
+					if width == device.WIDTH_8:
+						str = '{} <- 0x{:02x}'.format(label, value)
+					elif width == device.WIDTH_16:
+						str = '{} <- 0x{:04x}'.format(label, value)
+					else:
+						str = '{} <- 0x{:08x}'.format(label, value)
+				device._emu.trace('DEV_WRITE', address = address, info = str)
+
 				dev.write(width, offset, value)
+
 			self.check_interrupts()
+
 		except Exception as e:
 			self._emu.fatal_exception(sys.exc_info())
 
 		return value
 
-	def add_device(self, dev, address = None, interrupt = None, debug = False):
+	def add_device(self, args, dev, address = None, interrupt = None, debug = False):
 		if address is not None:
 			if address < self._device_base:
-				raise RuntimeError("device cannot be registered outside device space")
+				raise RuntimeError('device cannot be registered at 0x{:x} (outside device space)'.format(address))
 			mem_set_device(address);
 		print dev
-		new_dev = dev(address = address, interrupt = interrupt, debug = debug)
+		new_dev = dev(args, address = address, interrupt = interrupt, debug = debug)
 		device._devices.append(new_dev)
 
 	def tick(self):
@@ -247,7 +271,7 @@ class uart(device):
 	SR_RXRDY = 0x01
 	SR_TXRDY = 0x02
 
-	def __init__(self, base, interrupt, debug=False):
+	def __init__(self, args, base, interrupt, debug=False):
 		self._base = base
 		self._name = "uart"
 		self._interrupt = interrupt
@@ -297,7 +321,7 @@ class timer(device):
 		'COUNT'  : 0x04
 	}
 
-	def __init__(self, base, interrupt, debug=False):
+	def __init__(self, args, base, interrupt, debug=False):
 		self._base = base
 		self._name = "timer"
 		self._interrupt = interrupt

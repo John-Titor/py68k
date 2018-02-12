@@ -92,16 +92,17 @@ class emulator(object):
 
 	cpu_frequency = 8
 
-	def __init__(self, image_filename, memory_size, trace_filename, device_base):
+	def __init__(self, args, memory_size):
 
 		self._dead = False
 		self._exception_info = None
 		self._postmortem = None
 		self._first_interrupt_time = 0.0
 		self._interrupt_count = 0
+		self._root_device = None
 
 		# initialise tracing
-		self._trace_file = open(trace_filename, "w")
+		self._trace_file = open(args.trace_file, "w")
 		self._trace_memory = False
 		self._trace_instructions = False
 		self._trace_jumps = False
@@ -113,8 +114,6 @@ class emulator(object):
 		self._trace_instruction_triggers = list()
 		self._trace_exception_list = list()
 		self._trace_jump_cache = dict()
-
-		self._device_base = device_base
 
 		# allocate memory for the emulation
 		mem_init(memory_size)
@@ -136,15 +135,8 @@ class emulator(object):
 		# enable memory tracing
 		mem_set_trace_mode(1)
 
-		# configure device space
-		self._root_device = device.root_device(self, self._device_base)
-
 		# load the executable image
-		self._image = self.loadImage(image_filename)
-
-		# reset the CPU ready for execution
-		pulse_reset()
-
+		self._image = self.loadImage(args.image)
 
 	def loadImage(self, image_filename):
 		try:
@@ -164,6 +156,9 @@ class emulator(object):
 
 	def run(self, cycle_limit = float('inf')):
 		signal.signal(signal.SIGINT, self._keyboard_interrupt)
+
+		# reset the CPU ready for execution
+		pulse_reset()
 
 		self._start_time = time.time()
 		self._cycle_limit = cycle_limit
@@ -193,11 +188,14 @@ class emulator(object):
 			pass
 
 
-	def add_device(self, dev, address = None, interrupt = None, debug = False):
+	def add_device(self, args, dev, address = None, interrupt = None, debug = False):
 		"""
 		Attach a device to the emulator at the given offset in device space
 		"""
-		self._root_device.add_device(dev, address, interrupt, debug)
+		if self._root_device is None:
+			self._root_device = dev(args = args, emu=self, address = address, debug = debug)
+		else:
+			self._root_device.add_device(args, dev, address, interrupt, debug)
 
 
 	@property
@@ -431,34 +429,38 @@ class emulator(object):
 
 
 	def fatal_info(self):
+		result = ''
 		if self._postmortem is not None:
-			return self._postmortem
+			result += self._postmortem
 		elif self._exception_info is not None:
-			return traceback.format_exception(self._exception_info)
+			etype, value, tb = self._exception_info
+			for str in traceback.format_exception(etype, value, tb):
+				result += str
 		else:
-			return 'no reason'
+			result += 'no reason'
+
+		return result
 
 
 def configure(args, stdscr):
 
+
 	if args.target == 'simple':
-		emu = emulator(memory_size = 128,
-	       		       image_filename = args.image,
-	       		       trace_filename = args.trace_file,
-	       		       device_base = 0xff0000)
+		emu = emulator(args, memory_size = 128)
 
 		# add some devices
-		emu.add_device(device.uart, 0xff0000, M68K_IRQ_2)
-		emu.add_device(device.timer, 0xff1000, M68K_IRQ_6)
+		emu.add_device(args, device.root_device, 0xff0000)
+		emu.add_device(args, device.uart, 0xff0000, M68K_IRQ_2)
+		emu.add_device(args, device.timer, 0xff1000, M68K_IRQ_6)
 
 	elif args.target == 'tiny68k':
-		emu = emulator(memory_size = (16 * 1024 - 32),
-	       		       image_filename = args.image,
-	       		       trace_filename = args.trace_file,
-	       		       device_base = 0xfff000)
+		emu = emulator(args, memory_size = (16 * 1024 - 32))
+
+		emu.add_device(args, device.root_device, 0xff8000)
 
 		import deviceDUART
-		emu.add_device(deviceDUART.DUART, 
+		emu.add_device(args, 
+			       deviceDUART.DUART, 
 			       address = 0xfff000,
 			       interrupt = M68K_IRQ_2,
 			       debug = False)
@@ -468,7 +470,7 @@ def configure(args, stdscr):
 
 	import deviceConsole
 	deviceConsole.Console.stdscr = stdscr
-	emu.add_device(deviceConsole.Console, debug = False)
+	emu.add_device(args, deviceConsole.Console, debug = False)
 
 	return emu
 
@@ -527,6 +529,9 @@ parser.add_argument('--trace-exception',
 		    default=list(),
 		    metavar='EXCEPTION',
 		    help='enable tracing for EXCEPTION at startup (may be specified more than once)')
+parser.add_argument('--trace-io',
+		    action='store_true',
+		    help='enable tracing of I/O space accesses')
 parser.add_argument('--trace-cycle-limit',
 		    type=int,
 		    default=0,
@@ -535,7 +540,13 @@ parser.add_argument('--trace-cycle-limit',
 parser.add_argument('--trace-check-PC-in-text',
 		    action='store_true',
 		    help='when tracing instructions, stop if the PC lands outside the text section')
+parser.add_argument('--diskfile',
+		    type=str,
+		    default=None,
+		    help='disk image file')
 parser.add_argument('image',
+		    type=str,
+		    default='none',
 		    help='executable to load')
 args = parser.parse_args()
 

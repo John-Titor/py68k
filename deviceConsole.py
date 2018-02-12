@@ -26,7 +26,7 @@ class Console(device):
 		curses.KEY_END		: '\x1b4'	# End
 	}
 
-	def __init__(self, address, interrupt, debug = False):
+	def __init__(self, args, address, interrupt, debug = False):
 		super(Console, self).__init__('console', debug = debug)
 		device.root_device.register_console_output_driver(self)
 		Console.stdscr.nodelay(1)

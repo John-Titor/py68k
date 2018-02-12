@@ -70,12 +70,10 @@ class Channel():
 		else:
 			value = 0xff
 
-		#self._parent.trace('{:x} -> 0x{:x}'.format(addr, value))
 		self.update_status()
 		return value
 
 	def write(self, addr, value):
-		#self._parent.trace('{:x} <- 0x{:x}'.format(addr, value))
 
 		if addr == Channel.REG_MR:
 			if self._mrAlt:
@@ -84,7 +82,8 @@ class Channel():
 				self._mrAlt = True
 				self._mr1 = value
 
-		#elif addr == Channel.REG_CSR:
+		elif addr == Channel.REG_CSR:
+			pass
 
 		elif addr == Channel.REG_CR:
 			# rx/tx dis/enable logic
@@ -302,7 +301,7 @@ class DUART(device):
 		'STOPCC/OPRCLR' : 0x1f
 	}
 
-	def __init__(self, address, interrupt, debug):
+	def __init__(self, args, address, interrupt, debug):
 		super(DUART, self).__init__('DUART', address = address, interrupt = interrupt, debug = debug)
 		self.map_registers(DUART._registers)
 
@@ -351,16 +350,10 @@ class DUART(device):
 		else:
 			raise RuntimeError('read from 0x{:02x} not handled'.format(offset))
 
-		regname = self.get_register_name(offset).split('/')[0]
-		self.trace(regname, '-> 0x{:02x}'.format(value))
-
 		self.update_status()
 		return value
 
 	def write(self, width, offset, value):
-		regname = self.get_register_name(offset).split('/')[-1]
-		self.trace(regname, '<- 0x{:02x}'.format(value))
-
 		regsel = offset & DUART.REG_SELMASK
 		if regsel == DUART.REG_SEL_A:
 			self._a.write(offset - DUART.REG_SEL_A, value);
