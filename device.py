@@ -157,7 +157,11 @@ class root_device(device):
 		# dispatch to device emulator
 		try:
 			offset = address - device._device_base
-			value = device._register_to_device[address].access(chr(mode), width, offset, value)
+			dev = device._register_to_device[address]
+			if chr(mode) == device.MODE_READ:
+				value = dev.read(width, offset)
+			else:
+				dev.write(width, offset, value)
 			self.check_interrupts()
 		except Exception as e:
 			self._emu.fatal_exception(e)
@@ -251,26 +255,25 @@ class uart(device):
 		self.map_registers(self._registers)
 		self.reset()
 
-	def access(self, mode, width, addr, value):
-		if mode == device.MODE_READ:
-			if addr == self._registers['SR']:
-				value = 0
-				if self._rx_ready:
-					value |= SR_RXRDY
-				if self._tx_ready:
-					value |= SR_TXRDY
-			elif addr == self._registers['DR']:
-				value = self._rx_data
-
-		elif mode == device.MODE_WRITE:
-			if addr == self._registers['DR']:
-				self.trace('write', '{}'.format(chr(value).__repr__()))
-				sys.stdout.write(chr(value))
-				sys.stdout.flush()
+	def read(self, width, addr):
+		if addr == self._registers['SR']:
+			value = 0
+			if self._rx_ready:
+				value |= SR_RXRDY
+			if self._tx_ready:
+				value |= SR_TXRDY
+		elif addr == self._registers['DR']:
+			value = self._rx_data
 
 		return value
 
-	def tick(self, current_time):
+	def write(self, width, addr, value):
+		if addr == self._registers['DR']:
+			self.trace('write', '{}'.format(chr(value).__repr__()))
+			sys.stdout.write(chr(value))
+			sys.stdout.flush()
+
+	def tick(self):
 		# emulate tx drain, get rx data from stdin?
 		return 0
 
@@ -302,25 +305,21 @@ class timer(device):
 		self.map_registers(self._registers)
 		self.reset()
 
-	def access(self, mode, width, addr, value):
-		if mode == device.MODE_READ:
-			if addr == self._registers['RELOAD']:
-				value = self._reload
-			if addr == self._registers['COUNT']:
-				# force a tick to make sure we have caught up with time
-				self.tick(device._emu.current_time)
-				value = self._count	
-
-		elif mode == device.MODE_WRITE:
-			if addr == self._registers['RELOAD']:
-				self.trace('set reload', '{}'.format(value))
-				self._reload = value
-				self._count = self._reload
-				self._last_update = device._emu.current_time
-
+	def read(self, width, addr):
+		if addr == self._registers['RELOAD']:
+			value = self._reload
+		if addr == self._registers['COUNT']:
+			# force a tick to make sure we have caught up with time
+			self.tick(device._emu.current_time)
+			value = self._count	
 		return value
 
-
+	def write(self, width, addr, value):
+		if addr == self._registers['RELOAD']:
+			self.trace('set reload', '{}'.format(value))
+			self._reload = value
+			self._count = self._reload
+			self._last_update = device._emu.current_time
 
 	def tick(self):
 		# do nothing if we are disabled

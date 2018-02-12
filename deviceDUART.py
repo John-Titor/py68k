@@ -51,66 +51,66 @@ class Channel():
 		self._rxEnable = False;
 		self._txEnable = False;
 
-	def access(self, mode, addr, value):
-		if mode == device.MODE_READ:
-			if addr == Channel.REG_MR:
-				if self._mrAlt:
-					value = self._mr2
-				else:
-					self._mrAlt = True
-					value = self._mr1
-
-			elif addr == Channel.REG_SR:
-				value = self._sr
-
-			elif addr == Channel.REG_RB:
-				if len(self._rxfifo) > 0:
-					value = self._rxfifo.popleft()
-
-			# default read result
+	def read(self, addr):
+		if addr == Channel.REG_MR:
+			if self._mrAlt:
+				value = self._mr2
 			else:
-				value = 0xff
+				self._mrAlt = True
+				value = self._mr1
 
-			#self._parent.trace('{:x} -> 0x{:x}'.format(addr, value))
+		elif addr == Channel.REG_SR:
+			value = self._sr
 
-		if mode == device.MODE_WRITE:
-			#self._parent.trace('{:x} <- 0x{:x}'.format(addr, value))
+		elif addr == Channel.REG_RB:
+			if len(self._rxfifo) > 0:
+				value = self._rxfifo.popleft()
 
-			if addr == Channel.REG_MR:
-				if self._mrAlt:
-					self._mr2 = value
-				else:
-					self._mrAlt = True
-					self._mr1 = value
+		# default read result
+		else:
+			value = 0xff
 
-			#elif addr == Channel.REG_CSR:
-
-			elif addr == Channel.REG_CR:
-				# rx/tx dis/enable logic
-				if value & Channel.CTRL_RXDIS:
-					self._rxEnable = False
-				elif value & Channel.CTRL_RXEN:
-					self._rxEnable = True
-				if value & Channel.CTRL_TXDIS:
-					self._txEnable = False
-				elif value & Channel.CTRL_TXEN:
-					self._txEnable = True
-
-				cmd = value & Channel.CTRL_CMD_MASK
-				if cmd == Channel.CTRL_MRRST:
-					self._mrAlt = False
-				elif cmd == Channel.CTRL_RXRST:
-					self._rxEnable = False
-					self._rxfifo.clear()
-				elif cmd == Channel.CTRL_TXRST:
-					self._txEnable = False
-					#self._txfifo
-
-			elif addr == Channel.REG_TB:
-				device.root_device.console_output(value)
-
+		#self._parent.trace('{:x} -> 0x{:x}'.format(addr, value))
 		self.update_status()
 		return value
+
+	def write(self, addr, value):
+		#self._parent.trace('{:x} <- 0x{:x}'.format(addr, value))
+
+		if addr == Channel.REG_MR:
+			if self._mrAlt:
+				self._mr2 = value
+			else:
+				self._mrAlt = True
+				self._mr1 = value
+
+		#elif addr == Channel.REG_CSR:
+
+		elif addr == Channel.REG_CR:
+			# rx/tx dis/enable logic
+			if value & Channel.CTRL_RXDIS:
+				self._rxEnable = False
+			elif value & Channel.CTRL_RXEN:
+				self._rxEnable = True
+			if value & Channel.CTRL_TXDIS:
+				self._txEnable = False
+			elif value & Channel.CTRL_TXEN:
+				self._txEnable = True
+
+			cmd = value & Channel.CTRL_CMD_MASK
+			if cmd == Channel.CTRL_MRRST:
+				self._mrAlt = False
+			elif cmd == Channel.CTRL_RXRST:
+				self._rxEnable = False
+				self._rxfifo.clear()
+			elif cmd == Channel.CTRL_TXRST:
+				self._txEnable = False
+				#self._txfifo
+
+		elif addr == Channel.REG_TB:
+			device.root_device.console_output(value)
+
+		self.update_status()
 
 	def update_status(self):
 		# transmitter is always ready
@@ -140,6 +140,7 @@ class Channel():
 		self._rxfifo.append(input)
 		self.update_status()
 		self._parent.update_status()
+
 
 class Counter():
 
@@ -257,8 +258,6 @@ class Counter():
 		return (self._parent.cycle_rate / 3.6) * self._prescale
 
 
-
-
 class DUART(device):
 
 	# assuming the device is mapped to the low byte
@@ -315,87 +314,86 @@ class DUART(device):
 
 		device.root_device.register_console_input_driver(self._a)
 
-	def access(self, mode, width, offset, value):
+	def read(self, width, offset):
+		regsel = offset & DUART.REG_SELMASK
+		if regsel == DUART.REG_SEL_A:
+			value = self._a.read(offset - DUART.REG_SEL_A);
 
-		if mode == device.MODE_READ:
-			regsel = offset & DUART.REG_SELMASK
-			if regsel == DUART.REG_SEL_A:
-				value = self._a.access(mode, offset - DUART.REG_SEL_A, value);
+		elif regsel == DUART.REG_SEL_B:
+			value = self._b.read(offset - DUART.REG_SEL_B);
 
-			elif regsel == DUART.REG_SEL_B:
-				value = self._b.access(mode, offset - DUART.REG_SEL_B, value);
+		elif offset == DUART.REG_IPCR:
+			value = 0x03	# CTSA/CTSB are always asserted
 
-			elif offset == DUART.REG_IPCR:
-				value = 0x03	# CTSA/CTSB are always asserted
+		elif offset == DUART.REG_ISR:
+			value = self._isr
 
-			elif offset == DUART.REG_ISR:
-				value = self._isr
+		elif offset == DUART.REG_CUR:
+			value = self._counter.get_count() >> 8
 
-			elif offset == DUART.REG_CUR:
-				value = self._counter.get_count() >> 8
+		elif offset == DUART.REG_CLR:
+			value = self._counter.get_count() & 0xff
 
-			elif offset == DUART.REG_CLR:
-				value = self._counter.get_count() & 0xff
+		elif offset == DUART.REG_IVR:
+			value = self._ivr
 
-			elif offset == DUART.REG_IVR:
-				value = self._ivr
+		elif offset == DUART.REG_IPR:
+			value = 0x03	# CTSA/CTSB are always asserted
 
-			elif offset == DUART.REG_IPR:
-				value = 0x03	# CTSA/CTSB are always asserted
+		elif offset == DUART.REG_STARTCC:
+			self._counter.start()
+			value = 0xff
 
-			elif offset == DUART.REG_STARTCC:
-				self._counter.start()
-				value = 0xff
+		elif offset == DUART.REG_STOPCC:
+			self._counter.stop()
+			value = 0xff
 
-			elif offset == DUART.REG_STOPCC:
-				self._counter.stop()
-				value = 0xff
+		else:
+			raise RuntimeError('read from 0x{:02x} not handled'.format(offset))
 
-			else:
-				raise RuntimeError('read from 0x{:02x} not handled'.format(offset))
-
-			regname = self.get_register_name(offset).split('/')[0]
-			self.trace(regname, '-> 0x{:02x}'.format(value))
-
-		elif mode == device.MODE_WRITE:
-			regname = self.get_register_name(offset).split('/')[-1]
-			self.trace(regname, '<- 0x{:02x}'.format(value))
-
-			regsel = offset & DUART.REG_SELMASK
-			if regsel == DUART.REG_SEL_A:
-				self._a.access(mode, offset - DUART.REG_SEL_A, value);
-
-			elif regsel == DUART.REG_SEL_B:
-				self._b.access(mode, offset - DUART.REG_SEL_B, value);
-
-			elif offset == DUART.REG_ACR:
-				self._counter.set_mode(value)
-
-			elif offset == DUART.REG_IMR:
-				self._imr = value
-				# XXX interrupt status may have changed...
-
-			elif offset == DUART.REG_CTUR:
-				self._counter.set_reload_high(value)
-
-			elif offset == DUART.REG_CTLR:
-				self._counter.set_reload_low(value)
-
-			elif offset == DUART.REG_IVR:
-				self._ivr = value
-
-			elif offset == DUART.REG_OPCR:
-				pass
-			elif offset == DUART.REG_OPRSET:
-				pass
-			elif offset == DUART.REG_OPRCLR:
-				pass
-			else:
-				raise RuntimeError('write to 0x{:02x} not handled'.format(offset))
+		regname = self.get_register_name(offset).split('/')[0]
+		self.trace(regname, '-> 0x{:02x}'.format(value))
 
 		self.update_status()
-
 		return value
+
+	def write(self, width, offset, value):
+		regname = self.get_register_name(offset).split('/')[-1]
+		self.trace(regname, '<- 0x{:02x}'.format(value))
+
+		regsel = offset & DUART.REG_SELMASK
+		if regsel == DUART.REG_SEL_A:
+			self._a.write(offset - DUART.REG_SEL_A, value);
+
+		elif regsel == DUART.REG_SEL_B:
+			self._b.write(offset - DUART.REG_SEL_B, value);
+
+		elif offset == DUART.REG_ACR:
+			self._counter.set_mode(value)
+
+		elif offset == DUART.REG_IMR:
+			self._imr = value
+			# XXX interrupt status may have changed...
+
+		elif offset == DUART.REG_CTUR:
+			self._counter.set_reload_high(value)
+
+		elif offset == DUART.REG_CTLR:
+			self._counter.set_reload_low(value)
+
+		elif offset == DUART.REG_IVR:
+			self._ivr = value
+
+		elif offset == DUART.REG_OPCR:
+			pass
+		elif offset == DUART.REG_OPRSET:
+			pass
+		elif offset == DUART.REG_OPRCLR:
+			pass
+		else:
+			raise RuntimeError('write to 0x{:02x} not handled'.format(offset))
+
+		self.update_status()
 
 	def tick(self):
 		quantum = self._counter.tick()
