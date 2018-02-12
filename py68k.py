@@ -465,6 +465,12 @@ def configure(args, stdscr):
 			       interrupt = M68K_IRQ_2,
 			       debug = False)
 
+		import deviceCF
+		emu.add_device(args,
+			       deviceCF.CompactFlash,
+			       address = 0xffe000,
+			       debug = True)
+
 	else:
 		raise RuntimeError('unsupported target: ' + args.target)
 
