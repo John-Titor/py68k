@@ -58,9 +58,11 @@ class device(object):
                     raise RuntimeError(
                         'register at {} already assigned to {}'.format(regaddr, other._name))
             device._register_to_device[regaddr] = self
-            device._emu.trace('DEVICE', address=regaddr,
-                              info='add register {}/0x{:x} for {}'.format(reg, registers[reg], self._name))
             self._register_name_map[registers[reg]] = reg
+
+            if self._debug:
+                device._emu.trace('DEVICE', address=regaddr,
+                                  info='add register {}/0x{:x} for {}'.format(reg, registers[reg], self._name))
 
     def trace(self, action, info=''):
         """

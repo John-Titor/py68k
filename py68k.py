@@ -140,9 +140,6 @@ class emulator(object):
         set_reset_instr_callback(self.cb_trace_reset)
         mem_set_invalid_func(self.cb_buserror)
 
-        # enable memory tracing
-        mem_set_trace_mode(1)
-
         # load the executable image
         self._image = self.loadImage(args.image)
 
@@ -224,18 +221,21 @@ class emulator(object):
         if what == 'memory':
             self._trace_memory = True
             mem_set_trace_func(self.cb_trace_memory)
+            mem_set_trace_mode(1)
 
         elif what == 'read-trigger':
             addrs = self._image.symrange(option)
             self._trace_read_triggers.extend(addrs)
             self.log('adding memory read trigger: {}'.format(option))
             mem_set_trace_func(self.cb_trace_memory)
+            mem_set_trace_mode(1)
 
         elif what == 'write-trigger':
             addrs = self._image.symrange(option)
             self._trace_write_triggers.extend(addrs)
             self.log('adding memory write trigger: {}'.format(option))
             mem_set_trace_func(self.cb_trace_memory)
+            mem_set_trace_mode(1)
 
         elif what == 'instructions':
             self._trace_instructions = True
