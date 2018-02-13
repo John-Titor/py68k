@@ -13,14 +13,15 @@ from musashi.m68k import (
 
 class device(object):
     """
-    Generic device model
+    Generic device model.
 
-    Properties that can / should be set by instances:
+    Device models should:
 
-    _name       text name of the instance
-    _address    absolute base address of the instance or None if no registers
-    _interrupt  IPL asserted by the device or None if not interrupting
-    _debug      True to enable tracing
+    - call super().__init__(args, name, [address], [interrupt])
+    - if they supplied an address, implement read() and write()
+    - if they supplied an interrupt, implement get_interrupt() and get_vector()
+    - if they need to do periodic work, implement tick()
+    - if they need to do work on a reset instruction, implement reset()
 
     """
     _register_to_device = dict()
@@ -286,7 +287,7 @@ class uart(device):
     SR_RXRDY = 0x01
     SR_TXRDY = 0x02
 
-    def __init__(self, args, base, interrupt, debug=False):
+    def __init__(self, args, base, interrupt):
         super(uart, self).__init__(args=args, name='uart',
                                    address=base, interrupt=interrupt)
         self.map_registers(self._registers)
