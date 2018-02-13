@@ -17,15 +17,16 @@ class device(object):
 
     Properties that can / should be set by instances:
 
-    _name		text name of the instance
-    _address	absolute base address of the instance or None if no registers
-    _interrupt	IPL asserted by the device or None if not interrupting
-    _debug		True to enable tracing
+    _name       text name of the instance
+    _address    absolute base address of the instance or None if no registers
+    _interrupt  IPL asserted by the device or None if not interrupting
+    _debug      True to enable tracing
 
     """
     _register_to_device = dict()
     _devices = list()
     _emu = None
+    _debug = False
 
     root_device = None
 
@@ -143,10 +144,13 @@ class root_device(device):
     _console_input_driver = None
 
     def __init__(self, args, emu, address):
-        super(root_device, self).__init__(args=args, name='root', address=address)
+        super(root_device, self).__init__(
+            args=args, name='root', address=address)
         device._emu = emu
         device._device_base = address
         device.root_device = self
+
+        device._debug = 'device' in args.debug_device
 
         self._trace_io = args.trace_io or args.trace_everything
 
@@ -281,7 +285,8 @@ class uart(device):
     SR_TXRDY = 0x02
 
     def __init__(self, args, base, interrupt, debug=False):
-        super(uart, self).__init__(args=args, name='uart', address=base, interrupt=interrupt)
+        super(uart, self).__init__(args=args, name='uart',
+                                   address=base, interrupt=interrupt)
         self.map_registers(self._registers)
         self.reset()
 
@@ -329,7 +334,8 @@ class timer(device):
     }
 
     def __init__(self, args, base, interrupt):
-        super(timer, self).__init__(args=args, name='timer', address=base, interrupt=interrupt)
+        super(timer, self).__init__(args=args, name='timer',
+                                    address=base, interrupt=interrupt)
         self.map_registers(self._registers)
         self.reset()
 

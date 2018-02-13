@@ -200,7 +200,8 @@ class emulator(object):
         if self._root_device is None:
             self._root_device = dev(args=args, emu=self, address=address)
         else:
-            self._root_device.add_device(args=args, dev=dev, address=address, interrupt=interrupt)
+            self._root_device.add_device(
+                args=args, dev=dev, address=address, interrupt=interrupt)
 
     @property
     def current_time(self):
@@ -575,7 +576,7 @@ parser.add_argument('--trace-check-PC-in-text',
 parser.add_argument('--debug-device',
                     type=str,
                     default='',
-                    help='comma-separated list of devices to enable debug tracing')
+                    help='comma-separated list of devices to enable debug tracing, \'device\' to trace device framework')
 parser.add_argument('--diskfile',
                     type=str,
                     default=None,
