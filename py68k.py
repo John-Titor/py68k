@@ -193,15 +193,14 @@ class emulator(object):
         except Exception:
             pass
 
-    def add_device(self, args, dev, address=None, interrupt=None, debug=False):
+    def add_device(self, args, dev, address=None, interrupt=None):
         """
         Attach a device to the emulator at the given offset in device space
         """
         if self._root_device is None:
-            self._root_device = dev(
-                args=args, emu=self, address=address, debug=debug)
+            self._root_device = dev(args=args, emu=self, address=address)
         else:
-            self._root_device.add_device(args, dev, address, interrupt, debug)
+            self._root_device.add_device(args=args, dev=dev, address=address, interrupt=interrupt)
 
     @property
     def current_time(self):
@@ -457,21 +456,19 @@ def configure(args, stdscr):
         emu.add_device(args,
                        deviceDUART.DUART,
                        address=0xfff000,
-                       interrupt=M68K_IRQ_2,
-                       debug=False)
+                       interrupt=M68K_IRQ_2)
 
         import deviceCF
         emu.add_device(args,
                        deviceCF.CompactFlash,
-                       address=0xffe000,
-                       debug=False)
+                       address=0xffe000)
 
     else:
         raise RuntimeError('unsupported target: ' + args.target)
 
     import deviceConsole
     deviceConsole.Console.stdscr = stdscr
-    emu.add_device(args, deviceConsole.Console, debug=False)
+    emu.add_device(args, deviceConsole.Console)
 
     return emu
 
@@ -575,6 +572,10 @@ parser.add_argument('--trace-cycle-limit',
 parser.add_argument('--trace-check-PC-in-text',
                     action='store_true',
                     help='when tracing instructions, stop if the PC lands outside the text section')
+parser.add_argument('--debug-device',
+                    type=str,
+                    default='',
+                    help='comma-separated list of devices to enable debug tracing')
 parser.add_argument('--diskfile',
                     type=str,
                     default=None,

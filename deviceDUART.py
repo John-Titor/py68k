@@ -306,9 +306,9 @@ class DUART(device):
         'STOPCC/OPRCLR': 0x1f
     }
 
-    def __init__(self, args, address, interrupt, debug):
-        super(DUART, self).__init__('DUART', address=address,
-                                    interrupt=interrupt, debug=debug)
+    def __init__(self, args, address, interrupt):
+        super(DUART, self).__init__(args=args, name='DUART', address=address,
+                                    interrupt=interrupt)
         self.map_registers(DUART._registers)
 
         self._a = Channel(self)

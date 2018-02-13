@@ -55,8 +55,8 @@ class CompactFlash(device):
     AMODE_WRITE = 'W'
     AMODE_NONE = 'N'
 
-    def __init__(self, args, address, interrupt, debug):
-        super(CompactFlash, self).__init__('CF', address=address, debug=debug)
+    def __init__(self, args, address, interrupt):
+        super(CompactFlash, self).__init__(args=args, name='CF', address=address)
         self.map_registers(CompactFlash._registers)
 
         # open the backing file

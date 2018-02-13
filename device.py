@@ -35,11 +35,12 @@ class device(object):
     WIDTH_16 = 1
     WIDTH_32 = 2
 
-    def __init__(self, name, address=None, interrupt=None, debug=False):
+    def __init__(self, args, name, address=None, interrupt=None):
         self._name = name
         self._address = address
         self._interrupt = interrupt
-        self._debug = debug
+
+        self._debug = self._name in args.debug_device
 
     def map_registers(self, registers):
         """
@@ -141,8 +142,8 @@ class root_device(device):
     _console_output_driver = None
     _console_input_driver = None
 
-    def __init__(self, args, emu, address, debug=False):
-        super(root_device, self).__init__('root', address=address, debug=debug)
+    def __init__(self, args, emu, address):
+        super(root_device, self).__init__(args=args, name='root', address=address)
         device._emu = emu
         device._device_base = address
         device.root_device = self
@@ -212,14 +213,13 @@ class root_device(device):
 
         return value
 
-    def add_device(self, args, dev, address=None, interrupt=None, debug=False):
+    def add_device(self, args, dev, address=None, interrupt=None):
         if address is not None:
             if address < self._device_base:
                 raise RuntimeError(
                     'device cannot be registered at 0x{:x} (outside device space)'.format(address))
             mem_set_device(address)
-        print dev
-        new_dev = dev(args, address=address, interrupt=interrupt, debug=debug)
+        new_dev = dev(args=args, address=address, interrupt=interrupt)
         device._devices.append(new_dev)
 
     def tick(self):
@@ -281,10 +281,7 @@ class uart(device):
     SR_TXRDY = 0x02
 
     def __init__(self, args, base, interrupt, debug=False):
-        self._base = base
-        self._name = "uart"
-        self._interrupt = interrupt
-        self._debug = debug
+        super(uart, self).__init__(args=args, name='uart', address=base, interrupt=interrupt)
         self.map_registers(self._registers)
         self.reset()
 
@@ -331,11 +328,8 @@ class timer(device):
         'COUNT': 0x04
     }
 
-    def __init__(self, args, base, interrupt, debug=False):
-        self._base = base
-        self._name = "timer"
-        self._interrupt = interrupt
-        self._debug = debug
+    def __init__(self, args, base, interrupt):
+        super(timer, self).__init__(args=args, name='timer', address=base, interrupt=interrupt)
         self.map_registers(self._registers)
         self.reset()
 
