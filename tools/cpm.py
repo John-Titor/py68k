@@ -10,7 +10,7 @@ import os
 
 class CPMFile(object):
     """
-    A CPM executable or object file
+    A CPM executable ('load file' or 'command file')
     """
 
     # object file types
@@ -79,7 +79,7 @@ class CPMFile(object):
         if magic[0] == self.TYPE_CONTIG:
             fmt = '>HLLLLLLH'
         elif magic[0] == self.TYPE_NONCONTIG:
-            fmt = '>HLLLLLLHLL'
+            raise RuntimeError('non-contiguous text/data format not supported')
         else:
             raise RuntimeError('invalid header magic 0x{:04x}'.format(magic))
 
@@ -100,56 +100,43 @@ class CPMFile(object):
         symtabEnd = symtabStart + symtabSize
 
         if fields[7] == self.WITH_RELOCS:
-            textRelocStart = symtabEnd
-            textRelocEnd = textRelocStart + textSize
-
-            dataRelocStart = textRelocEnd
-            dataRelocEnd = dataRelocStart + dataSize
+            relocStart = symtabEnd
+            relocEnd = relocStart + textSize + dataSize
         else:
-            dataRelocEnd = symtabEnd
+            relocEnd = symtabEnd
 
         # check filesize
-        if dataRelocEnd > len(fileBytes):
+        if relocEnd > len(fileBytes):
             raise RuntimeError('header / file size mismatch')
 
         # build out our internal representation of the file
         self.text = fileBytes[textStart:textEnd]
         self.textAddress = fields[6]
-
         self.data = fileBytes[dataStart:dataEnd]
-        if magic[0] == self.TYPE_CONTIG:
-            self.dataAddress = self.textAddress + textSize
-        else:
-            self.dataAddress = fields[8]
-
         self.bssSize = fields[3]
-        if magic[0] == self.TYPE_CONTIG:
-            self.bssAddress = self.dataAddress + dataSize
-        else:
-            self.bssAddress = fields[9]
 
         if symtabSize > 0:
             self._sym = fileBytes[symtabStart:symtabEnd]
 
+        self.relocs = dict()
         if fields[7] == self.WITH_RELOCS:
             if self.textAddress > 0:
-                print 'WARNING: relocatable file but text address != 0'
-            self._textRelocs = self._decodeRelocs(
-                fileBytes[textRelocStart:textRelocEnd])
-            self._dataRelocs = self._decodeRelocs(
-                fileBytes[dataRelocStart:dataRelocEnd])
+                raise RuntimeError('relocatable file but text address != 0')
+            self._decodeRelocs(fileBytes[relocStart:relocEnd])
 
         # should check for text / data / bss overlap
 
     def _decodeRelocs(self, bytes):
         """
         Decode in-file relocations and produce a collection of only the interesting ones
+
+        CP/M relocation words map 1:1 to words in the text, then data sections, so address
+        can be directly inferred from offset (and we are only supporting contiguous text,data)
         """
 
         fields = len(bytes) / 2
         relocs = struct.unpack('>{}H'.format(fields), bytes)
 
-        output = dict()
         size32 = False
         offset = 0
         for reloc in relocs:
@@ -185,7 +172,7 @@ class CPMFile(object):
                     outputType |= self.RELOC_SIZE_16
                     outputOffset = offset
 
-                output[outputOffset] = outputType
+                self.relocs[outputOffset] = outputType
 
             offset += 2
             if relocType != self.RELOC_TYPE_UPPER:
@@ -193,12 +180,12 @@ class CPMFile(object):
 
         return output
 
-    def _encodeRelocs(self, relocs, sectionSize):
+    def _encodeRelocs(self, relocs, outputSize):
         """
         Encode relocations in a format suitable for writing to a file
         """
 
-        relocBytes = bytearray(sectionSize)
+        relocBytes = bytearray(outputSize)
 
         for offset in relocs:
             relocSize = reloc[offset] & self.RELOC_SIZE_MASK
