@@ -49,25 +49,20 @@ class CPMFile(object):
     RELOC_SIZE_32 = 0x20000
     RELOC_SIZE_MASK = 0x30000
 
-    def __init__(self, withFile=None):
-        self.text = None
-        self.textAddress = 0
+    def __init__(self, text, textAddress, data, bssSize, relocs):
+        self.text = text
+        self.textAddress = textAddress
 
-        self.data = None
-        self.dataAddress = 0
+        self.data = data
+        self.dataAddress = textAddress + len(text)
 
-        self.bssSize = 0
-        self.bssAddress = 0
+        self.bssSize = bssSize
+        self.bssAddress = self.dataAddress + len(data)
 
-        self._sym = None
+        self.relocs = relocs
 
-        self._textRelocs = None
-        self._dataRelocs = None
-
-        if withFile is not None:
-            self._load(withFile)
-
-    def _load(self, fo):
+    @classmethod
+    def load(cls, fo):
         """
         Parse a CP/M 68K executable and load the interesting parts
         """
@@ -76,9 +71,9 @@ class CPMFile(object):
 
         # get the filetype
         magic = struct.unpack('>H', fileBytes[0:2])
-        if magic[0] == self.TYPE_CONTIG:
+        if magic[0] == cls.TYPE_CONTIG:
             fmt = '>HLLLLLLH'
-        elif magic[0] == self.TYPE_NONCONTIG:
+        elif magic[0] == cls.TYPE_NONCONTIG:
             raise RuntimeError('non-contiguous text/data format not supported')
         else:
             raise RuntimeError('invalid header magic 0x{:04x}'.format(magic))
@@ -99,7 +94,7 @@ class CPMFile(object):
         symtabStart = dataEnd
         symtabEnd = symtabStart + symtabSize
 
-        if fields[7] == self.WITH_RELOCS:
+        if fields[7] == cls.WITH_RELOCS:
             relocStart = symtabEnd
             relocEnd = relocStart + textSize + dataSize
         else:
@@ -110,23 +105,29 @@ class CPMFile(object):
             raise RuntimeError('header / file size mismatch')
 
         # build out our internal representation of the file
-        self.text = fileBytes[textStart:textEnd]
-        self.textAddress = fields[6]
-        self.data = fileBytes[dataStart:dataEnd]
-        self.bssSize = fields[3]
+        text = fileBytes[textStart:textEnd]
+        textAddress = fields[6]
+        data = fileBytes[dataStart:dataEnd]
+        bssSize = fields[3]
 
-        if symtabSize > 0:
-            self._sym = fileBytes[symtabStart:symtabEnd]
+        # ignore syms
 
-        self.relocs = dict()
-        if fields[7] == self.WITH_RELOCS:
-            if self.textAddress > 0:
+        relocs = dict()
+        if fields[7] == cls.WITH_RELOCS:
+            if textAddress > 0:
                 raise RuntimeError('relocatable file but text address != 0')
-            self._decodeRelocs(fileBytes[relocStart:relocEnd])
+            relocs = cls.decodeRelocs(fileBytes[relocStart:relocEnd])
 
         # should check for text / data / bss overlap
 
-    def _decodeRelocs(self, bytes):
+        return cls(text=text,
+                   textAddress=textAddress,
+                   data=data,
+                   bssSize=bssSize,
+                   relocs=relocs)
+
+    @classmethod
+    def decodeRelocs(cls, bytes):
         """
         Decode in-file relocations and produce a collection of only the interesting ones
 
@@ -135,28 +136,29 @@ class CPMFile(object):
         """
 
         fields = len(bytes) / 2
-        relocs = struct.unpack('>{}H'.format(fields), bytes)
+        relocEntries = struct.unpack('>{}H'.format(fields), bytes)
 
+        relocs = dict()
         size32 = False
         offset = 0
-        for reloc in relocs:
+        for reloc in relocEntries:
             outputType = None
-            relocType = reloc & self.RELOC_TYPE_MASK
+            relocType = reloc & cls.RELOC_TYPE_MASK
 
             # these relocs are all NOPs
-            if (relocType == self.RELOC_TYPE_ABSOLUTE or
-                    relocType == self.RELOC_TYPE_INSTRUCTION):
+            if (relocType == cls.RELOC_TYPE_ABSOLUTE or
+                    relocType == cls.RELOC_TYPE_INSTRUCTION):
                 pass
 
             # these all encode the current offset / type
-            elif (relocType == self.RELOC_TYPE_DATA or
-                  relocType == self.RELOC_TYPE_TEXT or
-                  relocType == self.RELOC_TYPE_BSS):
+            elif (relocType == cls.RELOC_TYPE_DATA or
+                  relocType == cls.RELOC_TYPE_TEXT or
+                  relocType == cls.RELOC_TYPE_BSS):
 
                 outputType = relocType
 
             # this is a prefix for the following reloc
-            elif relocType == self.RELOC_TYPE_UPPER:
+            elif relocType == cls.RELOC_TYPE_UPPER:
                 size32 = True
             else:
                 # this includes external / pc-relative external relocs, which are only
@@ -166,19 +168,19 @@ class CPMFile(object):
 
             if outputType is not None:
                 if size32:
-                    outputType |= self.RELOC_SIZE_32
+                    outputType |= cls.RELOC_SIZE_32
                     outputOffset = offset - 2
                 else:
-                    outputType |= self.RELOC_SIZE_16
+                    outputType |= cls.RELOC_SIZE_16
                     outputOffset = offset
 
-                self.relocs[outputOffset] = outputType
+                relocs[outputOffset] = outputType
 
             offset += 2
-            if relocType != self.RELOC_TYPE_UPPER:
+            if relocType != cls.RELOC_TYPE_UPPER:
                 size32 = False
 
-        return output
+        return relocs
 
     def _encodeRelocs(self, relocs, outputSize):
         """
@@ -199,64 +201,42 @@ class CPMFile(object):
 
         return relocBytes
 
-    def save(self, fd):
+    def save(self, fo):
         """
         Write the object to a file
         """
 
-        if self._sym is None:
-            symLen = 0
-        else:
-            symLen = len(self._sym)
-
-        if (self._textRelocs is not None) and (self.textAddress != 0):
+        if (len(self.relocs) > 0) and (self.textAddress != 0):
             raise RuntimeError(
                 'cannot write relocatable file with text address != 0')
 
-        # if data / BSS are contiguous, use the compact format
-        if ((self.dataAddress == (self.textAddress + len(self.text))) and
-                (self.bssAddress == (self.textAddress + len(self.text) + len(self.data)))):
-            self.dataAddress = 0
-            self.bssAddress = 0
+        header = struct.pack('>HLLLLLH',
+                             cls.TYPE_CONTIG,
+                             len(self.text),
+                             len(self.data),
+                             self.bssSize,
+                             0,
+                             0,
+                             self.textAddress,
+                             0 if len(self.relocs) > 0 else 0xffff)
 
-        if self.dataAddress == 0:
-            if self.bssAddress != 0:
-                raise RuntimeError(
-                    'must specify data address if bss address is not zero')
+        fo.write(header)
+        fo.write(self.text)
+        fo.write(self.data)
+        if len(self.relocs) > 0:
+            fo.write(self._encodeRelocs(self.relocs))
 
-            header = struct.pack('>HLLLLLH',
-                                 cls.TYPE_CONTIG,
-                                 len(self.text),
-                                 len(self.data),
-                                 self.bssSize,
-                                 symLen,
-                                 0,
-                                 self.textAddress,
-                                 0 if self._textRelocs is not None else 0xffff)
-        else:
-            if self.bssAddress == 0:
-                self.bssAddress = self.dataAddress + len(self.data)
+    @property
+    def textSize(self):
+        return len(self.text)
 
-            header = struct.pack('>HLLLLLHLL',
-                                 cls.TYPE_NONCONTIG,
-                                 len(self.text),
-                                 len(self.data),
-                                 self.bssSize,
-                                 symLen,
-                                 0,
-                                 self.textAddress,
-                                 0 if self._textRelocs is not None else 0xffff,
-                                 self._data.address,
-                                 self._bss.address)
+    @property
+    def dataSize(self):
+        return len(self.data):
 
-        fd.write(header)
-        fd.write(self.text)
-        fd.write(self.data)
-        if self._sym is not None:
-            fd.write(self._sym)
-        if self._textRelocs is not None:
-            fd.write(self._encodeRelocs(self._textRelocs, len(self.text)))
-            fd.write(self._encodeRelocs(self._dataRelocs, len(self.data)))
+    @property
+    def relocSize(self):
+        return len(self.relocs)
 
 
 if __name__ == '__main__':
@@ -264,17 +244,12 @@ if __name__ == '__main__':
         raise RuntimeError('missing name of CP/M executable to inspect')
 
     fo = open(sys.argv[1], 'rb')
-    obj = CPMFile(fo)
+    obj = CPMFile.load(fo)
 
-    emit = 'text 0x{:08x}/{} data 0x{:08x}/{} BSS 0x{:08x}/{} '.format(
+    emit = 'text 0x{:08x}/{} data 0x{:08x}/{} BSS 0x{:08x}/{}'.format(
         obj.textAddress, len(obj.text),
         obj.dataAddress, len(obj.data),
         obj.bssAddress, obj.bssSize)
-    if obj._sym is not None:
-        emit += ' sym {}'.format(len(obj._sym))
-    if obj._textRelocs is not None:
-        emit += ' treloc {}'.format(len(obj._textRelocs))
-    if obj._dataRelocs is not None:
-        emit += ' dreloc {}'.format(len(obj._dataRelocs))
+    emit += ' reloc {}'.format(len(obj.relocs))
 
     print emit
