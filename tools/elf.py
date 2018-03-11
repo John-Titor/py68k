@@ -58,11 +58,11 @@ class ELFLoader(object):
 
         textSegment = ef.get_segment(0)
         textAddress = textSegment['p_vaddr']
-        textSize = textSegment['p_memsz']
+        textSize = textSegment['p_filesz']
 
         dataSegment = ef.get_segment(1)
         dataAddress = dataSegment['p_vaddr']
-        dataSize = dataSegment['p_memsz']
+        dataSize = dataSegment['p_filesz']
 
         # Look for BSS sections
         bssAddress = None
@@ -130,17 +130,22 @@ class ELFLoader(object):
 
                 for reloc in section.iter_relocations():
 
-                    if reloc.is_RELA():
-                        raise RuntimeError('unexpected RELA reloc')
+                    if not reloc.is_RELA():
+                        raise RuntimeError('unexpected REL reloc')
 
                     # get the symbol table entry the reloc refers to
                     if reloc['r_info_sym'] >= symtab.num_symbols():
                         raise RuntimeError(
                             'symbol reference in relocation out of bounds')
                     relAddress = reloc['r_offset']
-                    relTarget = symtab.get_symbol(
-                        reloc['r_info_sym'])['st_value']
+                    relTarget = symtab.get_symbol(reloc['r_info_sym'])['st_value']
                     relType = reloc['r_info_type']
+                    relAddend = reloc['r_addend']
+
+                    if relAddend != 0:
+                        raise RuntimeError('cannot handle non-zero addend')
+
+                    print("RELA address 0x{:x} target 0x{:x} type {} addend {}".format(relAddress, relTarget, relType, relAddend))
 
                     if relTarget < len(text):
                         relType |= R_TEXT

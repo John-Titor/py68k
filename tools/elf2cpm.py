@@ -24,6 +24,8 @@ def translateRelocs(elfRelocs):
 
     cpmRelocs = dict()
     for address in elfRelocs:
+        if not elfRelocs[address] in relocTypeMappings:
+            raise RuntimeError('unhandled ELF relocation 0x{:x}'.format(elfRelocs[address]))
         cpmRelocs[address] = relocTypeMappings[elfRelocs[address]]
 
     return cpmRelocs

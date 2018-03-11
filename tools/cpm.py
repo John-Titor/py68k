@@ -190,14 +190,14 @@ class CPMFile(object):
         relocBytes = bytearray(outputSize)
 
         for offset in relocs:
-            relocSize = reloc[offset] & RELOC_SIZE_MASK
-            relocType = reloc[offset] & RELOC_TYPE_MASK
+            relocSize = relocs[offset] & RELOC_SIZE_MASK
+            relocType = relocs[offset] & RELOC_TYPE_MASK
 
             if relocSize == RELOC_SIZE_32:
-                struct.pack_into('>H', relocBytes, RELOC_TYPE_UPPER)
+                struct.pack_into('>H', relocBytes, offset, RELOC_TYPE_UPPER)
                 offset += 2
 
-            struct.pack_into('>H', relocBytes, relocType)
+            struct.pack_into('>H', relocBytes, offset, relocType)
 
         return relocBytes
 
@@ -224,7 +224,7 @@ class CPMFile(object):
         fo.write(self.text)
         fo.write(self.data)
         if len(self.relocs) > 0:
-            fo.write(self._encodeRelocs(self.relocs))
+            fo.write(self._encodeRelocs(self.relocs, len(self.text) + len(self.data)))
 
     @property
     def textSize(self):
