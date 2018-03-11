@@ -3,9 +3,8 @@
 # CP/M 68K executable format tools
 #
 
-import struct
-import sys
-import os
+import struct, sys, os
+from hexdump import hexdump
 
 # object file types
 TYPE_CONTIG = 0x601a
@@ -246,10 +245,17 @@ if __name__ == '__main__':
     fo = open(sys.argv[1], 'rb')
     obj = CPMFile.load(fo)
 
-    emit = 'text 0x{:08x}/{} data 0x{:08x}/{} BSS 0x{:08x}/{}'.format(
+    emit = 'text 0x{:08x}/0x{:x} data 0x{:08x}/0x{:x} BSS 0x{:08x}/0x{:x}'.format(
         obj.textAddress, len(obj.text),
         obj.dataAddress, len(obj.data),
         obj.bssAddress, obj.bssSize)
     emit += ' reloc {}'.format(len(obj.relocs))
+    print(emit)
+    print('text')
+    hexdump(str(obj.text))
+    print('data')
+    hexdump(str(obj.data))
+    print('reloc')
+    for reloc in sorted(obj.relocs):
+        print('{:08x}: {:05x}'.format(reloc, obj.relocs[reloc]))
 
-    print emit

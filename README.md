@@ -12,6 +12,10 @@ Grab the BIOS image and CF CP/M image and run with something like:
 
 Exit by hitting ^C three times quickly.
 
+## Requirements
+
+Python, with vt102, pyelftools and hexdump modules installed.
+
 ## Todo
 
  - [ ] memory dump on exit

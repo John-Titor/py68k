@@ -145,7 +145,7 @@ class ELFLoader(object):
                     if relAddend != 0:
                         raise RuntimeError('cannot handle non-zero addend')
 
-                    print("RELA address 0x{:x} target 0x{:x} type {} addend {}".format(relAddress, relTarget, relType, relAddend))
+                    #print("RELA address 0x{:x} target 0x{:x} type {} addend {}".format(relAddress, relTarget, relType, relAddend))
 
                     if relTarget < len(text):
                         relType |= R_TEXT
