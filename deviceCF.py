@@ -218,10 +218,10 @@ class CompactFlash(device):
             self.trace('IOERR', 'data write when not writing')
             return 0
 
-        if width == device.WIDTH_8:
-            data = [value]
-        else:
-            data = [value & 0xff, value >> 8]
+        data = bytearray()
+        data.append(value & 0xff)
+        if width == device.WIDTH_16:
+            data.append(value >> 8)
 
         if self._bytes_remaining < len(data):
             self.trace('IOERR', 'write beyond sector buffer')
