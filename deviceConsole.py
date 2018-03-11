@@ -53,6 +53,9 @@ class Console(device):
 
     def handle_console_output(self, output):
         self.trace('out ' + self._fmt(output))
+
+        # vt102 is only 7-bit clean
+        output &= 0x7f
         self._buffered_output += unichr(output)
 
     def tick(self):
