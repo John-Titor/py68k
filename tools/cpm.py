@@ -7,47 +7,47 @@ import struct
 import sys
 import os
 
+# object file types
+TYPE_CONTIG = 0x601a
+TYPE_NONCONTIG = 0x601b
+
+# header relocation-present flag
+NO_RELOCS = 0xffff
+WITH_RELOCS = 0x0000
+
+# symbol type flags
+SYM_TYPE_DEFINED = 0x8000
+SYM_TYPE_EQUATED = 0x4000
+SYM_TYPE_GLOBAL = 0x2000
+SYM_TYPE_EQUATED_REG = 0x1000
+SYM_TYPE_EXTERNAL_REF = 0x0800
+SYM_TYPE_DATA_RELOC = 0x0400
+SYM_TYPE_TEXT_RELOC = 0x0200
+SYM_TYPE_BSS_RELOC = 0x0100
+
+# relocation types
+RELOC_TYPE_ABSOLUTE = 0x0000
+RELOC_TYPE_DATA = 0x0001
+RELOC_TYPE_TEXT = 0x0002
+RELOC_TYPE_BSS = 0x0003
+RELOC_TYPE_UNDEFINED = 0x0004   # not supported here
+RELOC_TYPE_UPPER = 0x0005
+RELOC_TYPE_PCREL = 0x0006       # not supported here
+RELOC_TYPE_INSTRUCTION = 0x0007
+RELOC_TYPE_MASK = 0x0007
+RELOC_TYPE_INDEX_MASK = 0xfff8
+RELOC_TYPE_INDEX_SHIFT = 3
+
+# internal relocation codes
+RELOC_SIZE_16 = 0x10000
+RELOC_SIZE_32 = 0x20000
+RELOC_SIZE_MASK = 0x30000
+
 
 class CPMFile(object):
     """
     A CPM executable ('load file' or 'command file')
     """
-
-    # object file types
-    TYPE_CONTIG = 0x601a
-    TYPE_NONCONTIG = 0x601b
-
-    # header relocation-present flag
-    NO_RELOCS = 0xffff
-    WITH_RELOCS = 0x0000
-
-    # symbol type flags
-    SYM_TYPE_DEFINED = 0x8000
-    SYM_TYPE_EQUATED = 0x4000
-    SYM_TYPE_GLOBAL = 0x2000
-    SYM_TYPE_EQUATED_REG = 0x1000
-    SYM_TYPE_EXTERNAL_REF = 0x0800
-    SYM_TYPE_DATA_RELOC = 0x0400
-    SYM_TYPE_TEXT_RELOC = 0x0200
-    SYM_TYPE_BSS_RELOC = 0x0100
-
-    # relocation types
-    RELOC_TYPE_ABSOLUTE = 0x0000
-    RELOC_TYPE_DATA = 0x0001
-    RELOC_TYPE_TEXT = 0x0002
-    RELOC_TYPE_BSS = 0x0003
-    RELOC_TYPE_UNDEFINED = 0x0004   # not supported here
-    RELOC_TYPE_UPPER = 0x0005
-    RELOC_TYPE_PCREL = 0x0006       # not supported here
-    RELOC_TYPE_INSTRUCTION = 0x0007
-    RELOC_TYPE_MASK = 0x0007
-    RELOC_TYPE_INDEX_MASK = 0xfff8
-    RELOC_TYPE_INDEX_SHIFT = 3
-
-    # internal relocation codes
-    RELOC_SIZE_16 = 0x10000
-    RELOC_SIZE_32 = 0x20000
-    RELOC_SIZE_MASK = 0x30000
 
     def __init__(self, text, textAddress, data, bssSize, relocs):
         self.text = text
@@ -71,9 +71,9 @@ class CPMFile(object):
 
         # get the filetype
         magic = struct.unpack('>H', fileBytes[0:2])
-        if magic[0] == cls.TYPE_CONTIG:
+        if magic[0] == TYPE_CONTIG:
             fmt = '>HLLLLLLH'
-        elif magic[0] == cls.TYPE_NONCONTIG:
+        elif magic[0] == TYPE_NONCONTIG:
             raise RuntimeError('non-contiguous text/data format not supported')
         else:
             raise RuntimeError('invalid header magic 0x{:04x}'.format(magic))
@@ -94,7 +94,7 @@ class CPMFile(object):
         symtabStart = dataEnd
         symtabEnd = symtabStart + symtabSize
 
-        if fields[7] == cls.WITH_RELOCS:
+        if fields[7] == WITH_RELOCS:
             relocStart = symtabEnd
             relocEnd = relocStart + textSize + dataSize
         else:
@@ -113,7 +113,7 @@ class CPMFile(object):
         # ignore syms
 
         relocs = dict()
-        if fields[7] == cls.WITH_RELOCS:
+        if fields[7] == WITH_RELOCS:
             if textAddress > 0:
                 raise RuntimeError('relocatable file but text address != 0')
             relocs = cls.decodeRelocs(fileBytes[relocStart:relocEnd])
@@ -143,22 +143,22 @@ class CPMFile(object):
         offset = 0
         for reloc in relocEntries:
             outputType = None
-            relocType = reloc & cls.RELOC_TYPE_MASK
+            relocType = reloc & RELOC_TYPE_MASK
 
             # these relocs are all NOPs
-            if (relocType == cls.RELOC_TYPE_ABSOLUTE or
-                    relocType == cls.RELOC_TYPE_INSTRUCTION):
+            if (relocType == RELOC_TYPE_ABSOLUTE or
+                    relocType == RELOC_TYPE_INSTRUCTION):
                 pass
 
             # these all encode the current offset / type
-            elif (relocType == cls.RELOC_TYPE_DATA or
-                  relocType == cls.RELOC_TYPE_TEXT or
-                  relocType == cls.RELOC_TYPE_BSS):
+            elif (relocType == RELOC_TYPE_DATA or
+                  relocType == RELOC_TYPE_TEXT or
+                  relocType == RELOC_TYPE_BSS):
 
                 outputType = relocType
 
             # this is a prefix for the following reloc
-            elif relocType == cls.RELOC_TYPE_UPPER:
+            elif relocType == RELOC_TYPE_UPPER:
                 size32 = True
             else:
                 # this includes external / pc-relative external relocs, which are only
@@ -168,16 +168,16 @@ class CPMFile(object):
 
             if outputType is not None:
                 if size32:
-                    outputType |= cls.RELOC_SIZE_32
+                    outputType |= RELOC_SIZE_32
                     outputOffset = offset - 2
                 else:
-                    outputType |= cls.RELOC_SIZE_16
+                    outputType |= RELOC_SIZE_16
                     outputOffset = offset
 
                 relocs[outputOffset] = outputType
 
             offset += 2
-            if relocType != cls.RELOC_TYPE_UPPER:
+            if relocType != RELOC_TYPE_UPPER:
                 size32 = False
 
         return relocs
@@ -190,11 +190,11 @@ class CPMFile(object):
         relocBytes = bytearray(outputSize)
 
         for offset in relocs:
-            relocSize = reloc[offset] & self.RELOC_SIZE_MASK
-            relocType = reloc[offset] & self.RELOC_TYPE_MASK
+            relocSize = reloc[offset] & RELOC_SIZE_MASK
+            relocType = reloc[offset] & RELOC_TYPE_MASK
 
             if relocSize == RELOC_SIZE_32:
-                struct.pack_into('>H', relocBytes, self.RELOC_TYPE_UPPER)
+                struct.pack_into('>H', relocBytes, RELOC_TYPE_UPPER)
                 offset += 2
 
             struct.pack_into('>H', relocBytes, relocType)
@@ -210,15 +210,15 @@ class CPMFile(object):
             raise RuntimeError(
                 'cannot write relocatable file with text address != 0')
 
-        header = struct.pack('>HLLLLLH',
-                             cls.TYPE_CONTIG,
+        header = struct.pack('>HLLLLLLH',
+                             TYPE_CONTIG,
                              len(self.text),
                              len(self.data),
                              self.bssSize,
                              0,
                              0,
                              self.textAddress,
-                             0 if len(self.relocs) > 0 else 0xffff)
+                             WITH_RELOCS if len(self.relocs) > 0 else NO_RELOCS)
 
         fo.write(header)
         fo.write(self.text)
@@ -232,7 +232,7 @@ class CPMFile(object):
 
     @property
     def dataSize(self):
-        return len(self.data):
+        return len(self.data)
 
     @property
     def relocSize(self):
