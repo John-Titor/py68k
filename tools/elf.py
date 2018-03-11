@@ -8,7 +8,7 @@
 
 from elftools.elf.elffile import ELFFile
 from elftools.elf.relocation import RelocationSection
-from elftools.elf.constants import P_FLAGS
+from elftools.elf.constants import P_FLAGS, SH_FLAGS
 
 R_68K_32 = 0x01
 R_68K_16 = 0x02
@@ -22,10 +22,11 @@ R_BSS = 0x200
 class ELFLoader(object):
     """
     Read a simple ELF executable; should be linked with text at 0,
-    with relocations, text/data/BSS contiguous. 
+    with relocations, text/data/BSS in ascending address order and reasonably
+    contiguous. 
 
-    Sections other than .text, .data, .bss and relocations will be 
-    ignored...
+    At most one read-execute and one read-write segment are supported; normally
+    this should be .text / .data and friends.
     """
 
     P_FLAGS_MASK = P_FLAGS.PF_X | P_FLAGS.PF_R | P_FLAGS.PF_W
@@ -67,7 +68,8 @@ class ELFLoader(object):
         bssAddress = None
         bssLimit = None
         for section in ef.iter_sections():
-            if section['sh_type'] == 'SHT_NOBITS':
+            if (section['sh_type'] == 'SHT_NOBITS') and (section['sh_flags'] & SH_FLAGS.SHF_ALLOC):
+
                 secStart = section['sh_addr']
                 secLimit = section['sh_addr'] + section['sh_size']
 
