@@ -10,6 +10,7 @@ from elftools.elf.elffile import ELFFile
 from elftools.elf.relocation import RelocationSection
 from elftools.elf.constants import P_FLAGS, SH_FLAGS
 
+R_68K_NONE = 0x00
 R_68K_32 = 0x01
 R_68K_16 = 0x02
 R_68K_8 = 0x03
@@ -126,24 +127,38 @@ class ELFLoader(object):
         relocs = dict()
         for section in ef.iter_sections():
             if isinstance(section, RelocationSection):
+
+                # what section do these relocations affect?
+                relocSection = ef.get_section(section['sh_info'])
+                if not (relocSection['sh_flags'] & SH_FLAGS.SHF_ALLOC):
+                    #print('Not relocating {}'.format(relocSection.name))
+                    continue
+
+                #print('Relocate: {} using {}'.format(relocSection.name, section.name))
                 symtab = ef.get_section(section['sh_link'])
 
                 for reloc in section.iter_relocations():
+                    relAddress = reloc['r_offset']
+                    if relAddress >= (len(text) + len(data)):
+                        raise RuntimeError('relocation outside known space')
 
-                    if not reloc.is_RELA():
-                        raise RuntimeError('unexpected REL reloc')
+                    relType = reloc['r_info_type']
+                    if relType == R_68K_NONE:
+                        #print('ignoring none-reloc @ 0x{:x}'.format(relAddress))
+                        continue
+
+#                    if not reloc.is_RELA():
+#                        raise RuntimeError('unexpected REL reloc')
 
                     # get the symbol table entry the reloc refers to
                     if reloc['r_info_sym'] >= symtab.num_symbols():
                         raise RuntimeError(
                             'symbol reference in relocation out of bounds')
-                    relAddress = reloc['r_offset']
                     relTarget = symtab.get_symbol(reloc['r_info_sym'])['st_value']
-                    relType = reloc['r_info_type']
-                    relAddend = reloc['r_addend']
 
-                    if relAddend != 0:
-                        raise RuntimeError('cannot handle non-zero addend')
+                    # It looks like we can ignore the addend, as it's already
+                    # present in the object file...
+                    relAddend = reloc['r_addend']
 
                     #print("RELA address 0x{:x} target 0x{:x} type {} addend {}".format(relAddress, relTarget, relType, relAddend))
 
@@ -156,6 +171,9 @@ class ELFLoader(object):
                     else:
                         raise RuntimeError(
                             'relocation target not in known space')
+
+                    #print("    -> type 0x{:x}".format(relType))
+
 
                     relocs[relAddress] = relType
 

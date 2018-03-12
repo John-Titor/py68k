@@ -193,8 +193,14 @@ class CPMFile(object):
             relocType = relocs[offset] & RELOC_TYPE_MASK
 
             if relocSize == RELOC_SIZE_32:
+                if offset > (outputSize - 4):
+                    raise RuntimeError('reloc offset out of bounds: {}:{}'.format(offset, relocs[offset]))
+
                 struct.pack_into('>H', relocBytes, offset, RELOC_TYPE_UPPER)
                 offset += 2
+            else:
+                if offset > (outputSize - 2):
+                    raise RuntimeError('reloc offset out of bounds: {}:{}'.format(offset, relocs[offset]))
 
             struct.pack_into('>H', relocBytes, offset, relocType)
 
