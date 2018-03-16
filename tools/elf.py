@@ -9,6 +9,7 @@
 from elftools.elf.elffile import ELFFile
 from elftools.elf.relocation import RelocationSection
 from elftools.elf.constants import P_FLAGS, SH_FLAGS
+import struct
 
 R_68K_NONE = 0x00
 R_68K_32 = 0x01
@@ -123,6 +124,13 @@ class ELFLoader(object):
         text = textSegment.data().ljust(textSize, '\0')
         data = dataSegment.data().ljust(dataSize, '\0')
 
+        if len(text) != textSize:
+            raise RuntimeError('text size mismatch')
+        if len(data) != dataSize:
+            raise RuntimeError('data size mismatch')
+
+        print('text 0x{:x} data 0x{:x} bss 0x{:x}'.format(textSize, dataSize, bssSize))
+
         # look for relocations
         relocs = dict()
         for section in ef.iter_sections():
@@ -160,7 +168,7 @@ class ELFLoader(object):
                     # present in the object file...
                     relAddend = reloc['r_addend']
 
-                    #print("RELA address 0x{:x} target 0x{:x} type {} addend {}".format(relAddress, relTarget, relType, relAddend))
+                    #print('RELA address 0x{:x} target 0x{:x} type {} addend 0x{:x}'.format(relAddress, relTarget, relType, relAddend))
 
                     if relTarget < len(text):
                         relType |= R_TEXT
@@ -172,8 +180,22 @@ class ELFLoader(object):
                         raise RuntimeError(
                             'relocation target not in known space')
 
-                    #print("    -> type 0x{:x}".format(relType))
+                    #print(''    -> type 0x{:x}'.format(relType))
 
+                    if relAddress < len(text):
+                        inSeg = text
+                        segOffset = relAddress
+                    elif relAddress < (len(text) + len(data)):
+                        inSeg = data
+                        segOffset = relAddress - len(text)
+                    else:
+                        raise RuntimeError('relocation not in known space')
+
+                    unRelocated = struct.unpack('>L', inSeg[segOffset:segOffset+4])[0]
+                    #print('    unrelocated: 0x{:x}'.format(unRelocated))
+
+                    if unRelocated != (relTarget + relAddend):
+                        raise RuntimeError("unrelocated field 0x{:x} != target 0x{:x} + addend 0x{:x}".format(unRelocated, relTarget, relAddend))
 
                     relocs[relAddress] = relType
 
