@@ -8,7 +8,7 @@ else
 CC = gcc
 SO_EXT = so
 endif
-CFLAGS = -g -O3
+CFLAGS = -g -O3 -fPIC
 
 BUILD_DIR = BUILD
 
