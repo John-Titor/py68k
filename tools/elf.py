@@ -150,13 +150,18 @@ class ELFLoader(object):
                     if relAddress >= (len(text) + len(data)):
                         raise RuntimeError('relocation outside known space')
 
+                    if not reloc.is_RELA():
+                        raise RuntimeError('unexpected REL reloc')
+
                     relType = reloc['r_info_type']
-                    if relType == R_68K_NONE:
+                    if relType == R_68K_32:
+                        pass
+                    elif relType == R_68K_NONE:
                         #print('ignoring none-reloc @ 0x{:x}'.format(relAddress))
                         continue
+                    else:
+                        raise RuntimeError('unexpected relocation type {} @ 0x{:x}'.format(relAddress))
 
-#                    if not reloc.is_RELA():
-#                        raise RuntimeError('unexpected REL reloc')
 
                     # get the symbol table entry the reloc refers to
                     if reloc['r_info_sym'] >= symtab.num_symbols():
@@ -168,19 +173,25 @@ class ELFLoader(object):
                     # present in the object file...
                     relAddend = reloc['r_addend']
 
-                    #print('RELA address 0x{:x} target 0x{:x} type {} addend 0x{:x}'.format(relAddress, relTarget, relType, relAddend))
+                    #print('RELA address 0x{:08x} target 0x{:x} type {} addend 0x{:x}'.format(relAddress, relTarget, relType, relAddend))
 
                     if relTarget < len(text):
                         relType |= R_TEXT
+                        if relAddend > len(text):
+                            raise RuntimeError('addend outside of text section')
                     elif relTarget < (len(text) + len(data)):
                         relType |= R_DATA
+                        if relAddend > len(text):
+                            raise RuntimeError('addend outside of data section')
                     elif relTarget < (len(text) + len(data) + bssSize):
                         relType |= R_BSS
+                        if relAddend > bssSize:
+                            raise RuntimeError('addend outside of bss section')
                     else:
                         raise RuntimeError(
                             'relocation target not in known space')
 
-                    #print(''    -> type 0x{:x}'.format(relType))
+                    #print('    -> type 0x{:03x}'.format(relType))
 
                     if relAddress < len(text):
                         inSeg = text

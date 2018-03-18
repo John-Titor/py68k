@@ -263,5 +263,5 @@ if __name__ == '__main__':
     hexdump(str(obj.data))
     print('reloc')
     for reloc in sorted(obj.relocs):
-        print('{:08x}: {:05x}'.format(reloc, obj.relocs[reloc]))
+        print('0x{:08x}: {:05x}'.format(reloc, obj.relocs[reloc]))
 
