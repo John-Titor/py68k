@@ -6,9 +6,9 @@ Currently this is being used to model the Tiny68k board by Bill Shen:
 
 https://www.retrobrewcomputers.org/doku.php?id=boards:sbc:tiny68k:tiny68k_rev2
 
-Grab the BIOS image and CF CP/M image and run with something like:
+Grab the Tiny68K monitor / debugger image and CF CP/M image and run with something like:
 
-  ./py68k.py --target tiny68k --trace-everything --diskfile t68k_cpm_disk.bin bios.bin
+  ./py68k.py --target tiny68k --trace-everything --diskfile t68k_cpm_disk.bin T68kbug_r07.BIN
 
 Exit by hitting ^C three times quickly.
 
