@@ -4,6 +4,9 @@ OS = $(shell uname -s)
 ifeq "$(OS)" "Darwin"
 CC = clang
 SO_EXT = dylib
+else ifeq "$(OS)" "FreeBSD"
+CC = clang
+SO_EXT = so
 else
 CC = gcc
 SO_EXT = so
