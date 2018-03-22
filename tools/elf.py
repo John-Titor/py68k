@@ -11,10 +11,51 @@ from elftools.elf.relocation import RelocationSection
 from elftools.elf.constants import P_FLAGS, SH_FLAGS
 import struct
 
+# relocation types
 R_68K_NONE = 0x00
 R_68K_32 = 0x01
 R_68K_16 = 0x02
 R_68K_8 = 0x03
+R_68K_PC32 = 4
+R_68K_PC16 = 5
+R_68K_PC8 = 6
+R_68K_GOT32 = 7
+R_68K_GOT16 = 8
+R_68K_GOT8 = 9
+R_68K_GOT32O = 10
+R_68K_GOT16O = 11
+R_68K_GOT8O = 12
+R_68K_PLT32 = 13
+R_68K_PLT16 = 14
+R_68K_PLT8 = 15
+R_68K_PLT32O = 16
+R_68K_PLT16O = 17
+R_68K_PLT8O = 18
+R_68K_COPY = 19
+R_68K_GLOB_DAT = 20
+R_68K_JMP_SLOT = 21
+R_68K_RELATIVE = 22
+R_68K_GNU_VTINHERIT = 23
+R_68K_GNU_VTENTRY = 24
+R_68K_TLS_GD32 = 25
+R_68K_TLS_GD16 = 26
+R_68K_TLS_GD8 = 27
+R_68K_TLS_LDM32 = 28
+R_68K_TLS_LDM16 = 29
+R_68K_TLS_LDM8 = 30
+R_68K_TLS_LDO32 = 31
+R_68K_TLS_LDO16 = 32
+R_68K_TLS_LDO8 = 33
+R_68K_TLS_IE32 = 34
+R_68K_TLS_IE16 = 35
+R_68K_TLS_IE8 = 36
+R_68K_TLS_LE32 = 37
+R_68K_TLS_LE16 = 38
+R_68K_TLS_LE8 = 39
+R_68K_TLS_DTPMOD32 = 40
+R_68K_TLS_DTPREL32 = 41
+R_68K_TLS_TPREL32 = 42
+
 
 R_TEXT = 0x000
 R_DATA = 0x100
@@ -154,14 +195,6 @@ class ELFLoader(object):
                         raise RuntimeError('unexpected REL reloc')
 
                     relType = reloc['r_info_type']
-                    if relType == R_68K_32:
-                        pass
-                    elif relType == R_68K_NONE:
-                        #print('ignoring none-reloc @ 0x{:x}'.format(relAddress))
-                        continue
-                    else:
-                        raise RuntimeError('unexpected relocation type {} @ 0x{:x}'.format(relAddress))
-
 
                     # get the symbol table entry the reloc refers to
                     if reloc['r_info_sym'] >= symtab.num_symbols():
@@ -173,6 +206,24 @@ class ELFLoader(object):
                     # present in the object file...
                     relAddend = reloc['r_addend']
 
+                    # Sort out what we're going to do with this relocation...
+                    if relType == R_68K_32:
+                        pass
+                    elif relType == R_68K_NONE:
+                        #print('ignoring none-reloc @ 0x{:x}'.format(relAddress))
+                        continue
+                    elif relType == R_68K_PC32:
+                        #print('ignoring PC32 reloc @ 0x{:x} -> 0x{:x}+{:x}'.format(relAddress, relTarget, relAddend))
+                        continue
+                    elif relType == R_68K_PC16:
+                        #print('ignoring PC16 reloc @ 0x{:x} -> 0x{:x}+{:x}'.format(relAddress, relTarget, relAddend))
+                        continue
+                    elif relType == R_68K_PC8:
+                        #print('ignoring PC8 reloc @ 0x{:x} -> 0x{:x}+{:x}'.format(relAddress, relTarget, relAddend))
+                        continue
+                    else:
+                        raise RuntimeError('unexpected relocation type {} @ 0x{:x} -> 0x{:x}+x'.format(relType, relAddress, relTarget, relAddend))
+
                     #print('RELA address 0x{:08x} target 0x{:x} type {} addend 0x{:x}'.format(relAddress, relTarget, relType, relAddend))
 
                     if relTarget < len(text):
@@ -183,7 +234,8 @@ class ELFLoader(object):
                         relType |= R_DATA
                         if relAddend > len(text):
                             raise RuntimeError('addend outside of data section')
-                    elif relTarget < (len(text) + len(data) + bssSize):
+                    elif relTarget <= (len(text) + len(data) + bssSize):
+                        # note, <= to allow pointer to _end, which is immediately *after* the BSS
                         relType |= R_BSS
                         if relAddend > bssSize:
                             raise RuntimeError('addend outside of bss section')
