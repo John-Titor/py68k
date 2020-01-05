@@ -230,10 +230,11 @@ class root_device(device):
         device._devices.append(new_dev)
 
     def tick(self):
-        deadline = 0
+        deadline = 100000
         for dev in device._devices:
             ret = dev.tick()
-            if ret > 0 and (deadline == 0 or ret < deadline):
+            # let the device request an earlier deadline
+            if ret is not None and ret > 0 and ret < deadline:
                 deadline = ret
 
         self.check_interrupts()

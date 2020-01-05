@@ -192,7 +192,7 @@ def set_irq(level):
         set_irq_func(level)
 
 def execute(cycles):
-        return execute_func(cycles)
+        return execute_func(int(cycles))
 
 def get_reg(reg):
         return get_reg_func(None, reg)
@@ -216,7 +216,7 @@ __dis_buf = create_string_buffer(80)
 
 def disassemble(pc, cpu_type):
         n = disassemble_func(__dis_buf, pc, cpu_type)
-        return __dis_buf.value
+        return str(__dis_buf.value)
 
 # --- MEM API ---
 

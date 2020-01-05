@@ -56,7 +56,7 @@ class Console(device):
 
         # vt102 is only 7-bit clean
         output &= 0x7f
-        self._buffered_output += unichr(output)
+        self._buffered_output += chr(output)
 
     def tick(self):
         self._vt_stream.process(self._buffered_output)

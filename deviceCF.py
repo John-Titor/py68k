@@ -209,9 +209,9 @@ class CompactFlash(device):
 
         self._bytes_remaining -= count
         if width == device.WIDTH_8:
-            return ord(data[0])
+            return data[0]
         else:
-            return (ord(data[1]) << 8) + ord(data[0])
+            return (data[1] << 8) + data[0]
 
     def _io_write(self, width, value):
         if self._current_mode != CompactFlash.AMODE_WRITE:

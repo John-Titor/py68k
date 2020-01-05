@@ -8,6 +8,7 @@ from musashi.m68k import (
     mem_ram_write_block
 )
 
+# note - package is 'pyelftools'
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
 from elftools.elf.constants import SH_FLAGS
