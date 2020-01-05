@@ -66,7 +66,7 @@ class Console(device):
         for str in self._vt_screen.display:
             try:
                 self._win.addstr(row, 0, str)
-            except:
+            except Exception:
                 # XXX curses gets upset adding the last line - ignore it
                 pass
             row += 1

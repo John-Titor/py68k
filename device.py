@@ -56,8 +56,7 @@ class device(object):
             if (regaddr in device._register_to_device):
                 other = device._register_to_device[regaddr]
                 if self != other:
-                    raise RuntimeError(
-                        'register at {} already assigned to {}'.format(regaddr, other._name))
+                    raise RuntimeError('register at {} already assigned to {}'.format(regaddr, other._name))
             device._register_to_device[regaddr] = self
             self._register_name_map[registers[reg]] = reg
 
@@ -169,7 +168,7 @@ class root_device(device):
                         dev._name, vector))
                     return vector
             self.trace('no interrupting device')
-        except:
+        except Exception:
             self._emu.fatal_exception(sys.exc_info())
 
         return M68K_IRQ_SPURIOUS
@@ -201,8 +200,7 @@ class root_device(device):
 
             else:
                 if self._trace_io:
-                    label = "{}:{}".format(
-                        dev._name, dev.get_register_name(offset).split('/')[-1])
+                    label = "{}:{}".format(dev._name, dev.get_register_name(offset).split('/')[-1])
                     if width == device.WIDTH_8:
                         str = '{} <- 0x{:02x}'.format(label, value)
                     elif width == device.WIDTH_16:
@@ -223,8 +221,7 @@ class root_device(device):
     def add_device(self, args, dev, address=None, interrupt=None):
         if address is not None:
             if address < self._device_base:
-                raise RuntimeError(
-                    'device cannot be registered at 0x{:x} (outside device space)'.format(address))
+                raise RuntimeError('device cannot be registered at 0x{:x} (outside device space)'.format(address))
             mem_set_device(address)
         new_dev = dev(args=args, address=address, interrupt=interrupt)
         device._devices.append(new_dev)

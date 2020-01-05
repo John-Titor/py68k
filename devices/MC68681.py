@@ -263,7 +263,10 @@ class Counter():
         return (self._parent.cycle_rate / 3.6) * self._prescale
 
 
-class DUART(device):
+class MC68681(device):
+    """
+    Emulation of the MC68681 DUART / timer device.
+    """
 
     # assuming the device is mapped to the low byte
 
@@ -289,11 +292,11 @@ class DUART(device):
     REG_OPRCLR = 0x1f
 
     _registers = {
-        'MRA' : 0x01,
-        'SRA/CSRA' : 0x03,
-        'CRA' : 0x05,
-        'RBA/TBA' : 0x07,
-        'IPCR/ACR' : 0x09,
+        'MRA': 0x01,
+        'SRA/CSRA': 0x03,
+        'CRA': 0x05,
+        'RBA/TBA': 0x07,
+        'IPCR/ACR': 0x09,
         'ISR/IMR': 0x0b,
         'CUR/CTUR': 0x0d,
         'CLR/CTLR': 0x0f,
@@ -307,9 +310,11 @@ class DUART(device):
     }
 
     def __init__(self, args, address, interrupt):
-        super(DUART, self).__init__(args=args, name='DUART', address=address,
-                                    interrupt=interrupt)
-        self.map_registers(DUART._registers)
+        super(MC68681, self).__init__(args=args,
+                                      name='MC68681',
+                                      address=address,
+                                      interrupt=interrupt)
+        self.map_registers(MC68681._registers)
 
         self._a = Channel(self)
         self._b = Channel(self)
@@ -320,36 +325,36 @@ class DUART(device):
         device.root_device.register_console_input_driver(self._a)
 
     def read(self, width, offset):
-        regsel = offset & DUART.REG_SELMASK
-        if regsel == DUART.REG_SEL_A:
-            value = self._a.read(offset - DUART.REG_SEL_A)
+        regsel = offset & MC68681.REG_SELMASK
+        if regsel == MC68681.REG_SEL_A:
+            value = self._a.read(offset - MC68681.REG_SEL_A)
 
-        elif regsel == DUART.REG_SEL_B:
-            value = self._b.read(offset - DUART.REG_SEL_B)
+        elif regsel == MC68681.REG_SEL_B:
+            value = self._b.read(offset - MC68681.REG_SEL_B)
 
-        elif offset == DUART.REG_IPCR:
+        elif offset == MC68681.REG_IPCR:
             value = 0x03  # CTSA/CTSB are always asserted
 
-        elif offset == DUART.REG_ISR:
+        elif offset == MC68681.REG_ISR:
             value = self._isr
 
-        elif offset == DUART.REG_CUR:
+        elif offset == MC68681.REG_CUR:
             value = self._counter.get_count() >> 8
 
-        elif offset == DUART.REG_CLR:
+        elif offset == MC68681.REG_CLR:
             value = self._counter.get_count() & 0xff
 
-        elif offset == DUART.REG_IVR:
+        elif offset == MC68681.REG_IVR:
             value = self._ivr
 
-        elif offset == DUART.REG_IPR:
+        elif offset == MC68681.REG_IPR:
             value = 0x03  # CTSA/CTSB are always asserted
 
-        elif offset == DUART.REG_STARTCC:
+        elif offset == MC68681.REG_STARTCC:
             self._counter.start()
             value = 0xff
 
-        elif offset == DUART.REG_STOPCC:
+        elif offset == MC68681.REG_STOPCC:
             self._counter.stop()
             value = 0xff
 
@@ -360,34 +365,34 @@ class DUART(device):
         return value
 
     def write(self, width, offset, value):
-        regsel = offset & DUART.REG_SELMASK
-        if regsel == DUART.REG_SEL_A:
-            self._a.write(offset - DUART.REG_SEL_A, value)
+        regsel = offset & MC68681.REG_SELMASK
+        if regsel == MC68681.REG_SEL_A:
+            self._a.write(offset - MC68681.REG_SEL_A, value)
 
-        elif regsel == DUART.REG_SEL_B:
-            self._b.write(offset - DUART.REG_SEL_B, value)
+        elif regsel == MC68681.REG_SEL_B:
+            self._b.write(offset - MC68681.REG_SEL_B, value)
 
-        elif offset == DUART.REG_ACR:
+        elif offset == MC68681.REG_ACR:
             self._counter.set_mode(value)
 
-        elif offset == DUART.REG_IMR:
+        elif offset == MC68681.REG_IMR:
             self._imr = value
             # XXX interrupt status may have changed...
 
-        elif offset == DUART.REG_CTUR:
+        elif offset == MC68681.REG_CTUR:
             self._counter.set_reload_high(value)
 
-        elif offset == DUART.REG_CTLR:
+        elif offset == MC68681.REG_CTLR:
             self._counter.set_reload_low(value)
 
-        elif offset == DUART.REG_IVR:
+        elif offset == MC68681.REG_IVR:
             self._ivr = value
 
-        elif offset == DUART.REG_OPCR:
+        elif offset == MC68681.REG_OPCR:
             pass
-        elif offset == DUART.REG_OPRSET:
+        elif offset == MC68681.REG_OPRSET:
             pass
-        elif offset == DUART.REG_OPRCLR:
+        elif offset == MC68681.REG_OPRCLR:
             pass
         else:
             raise RuntimeError('write to 0x{:02x} not handled'.format(offset))

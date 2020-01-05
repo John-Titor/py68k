@@ -10,6 +10,7 @@ import importlib
 import emulator
 import device
 
+
 def configure(args, stdscr):
     try:
         target_module = importlib.import_module("targets." + args.target)
@@ -129,7 +130,8 @@ parser.add_argument('--trace-check-PC-in-text',
 parser.add_argument('--debug-device',
                     type=str,
                     default='',
-                    help='comma-separated list of devices to enable debug tracing, \'device\' to trace device framework')
+                    help='comma-separated list of devices to enable debug tracing, \'device\''
+                    ' to trace device framework')
 parser.add_argument('--diskfile',
                     type=str,
                     default=None,

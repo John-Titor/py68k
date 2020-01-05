@@ -5,7 +5,7 @@ from device import device
 
 class CompactFlash(device):
     """
-    CompactFlash emulation
+    Memory-mapped CompactFlash emulation.
 
     Reference: XT13/2008D
     """
@@ -25,14 +25,14 @@ class CompactFlash(device):
     REG_COMMAND = 0x0f
 
     _registers = {
-        'DATA16' : 0x00,
-        'DATA8' : 0x01,
+        'DATA16': 0x00,
+        'DATA8': 0x01,
         'ERROR/FEATURE': 0x03,
-        'SECTOR_COUNT' : 0x05,
+        'SECTOR_COUNT': 0x05,
         'SECTOR_NUMBER': 0x07,
-        'CYLINDER_LOW' : 0x09,
+        'CYLINDER_LOW': 0x09,
         'CYLINDER_HIGH': 0x0b,
-        'DRIVE/HEAD' : 0x0d,
+        'DRIVE/HEAD': 0x0d,
         'STATUS/COMMAND': 0x0f
     }
 

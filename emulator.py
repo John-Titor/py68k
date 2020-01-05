@@ -137,7 +137,7 @@ class Emulator(object):
     def loadImage(self, image_filename):
         try:
             suffix = image_filename.split('.')[1].lower()
-        except:
+        except Exception:
             raise RuntimeError(f"image filename '{image_filename}' must have an extension")
 
         if suffix == "elf":
@@ -328,7 +328,7 @@ class Emulator(object):
                     info = '{:#010x}'.format(value)
 
                 self.trace(direction, addr, info)
-        except:
+        except Exception:
             self.fatal_exception(sys.exc_info())
 
         return 0
@@ -353,7 +353,7 @@ class Emulator(object):
 
                 self.trace('EXECUTE', pc, '{:30} {}'.format(dis, info))
                 return
-        except:
+        except Exception:
             self.fatal_exception(sys.exc_info())
 
     def cb_trace_reset(self):
@@ -366,7 +366,7 @@ class Emulator(object):
         # devices must reset
         try:
             self._root_device.reset()
-        except:
+        except Exception:
             self.fatal_exception(sys.exc_info())
 
     def cb_trace_jump(self, new_pc, vector):
@@ -383,7 +383,7 @@ class Emulator(object):
                     ppc = get_reg(M68K_REG_PPC)
                     self.trace('EXCEPTION', ppc, 'vector {:#x} to {}'.format(
                         vector, self._image.lineinfo(new_pc)))
-        except:
+        except Exception:
             self.fatal_exception(sys.exc_info())
 
     def _keyboard_interrupt(self, signal=None, frame=None):

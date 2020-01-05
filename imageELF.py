@@ -158,7 +158,7 @@ class image(object):
             try:
                 addr = int(name)
                 size = 1
-            except:
+            except Exception:
                 raise RuntimeError(
                     'can\'t find a symbol called {} and can\'t convert it to an address'.format(name))
 
