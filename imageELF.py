@@ -2,6 +2,7 @@
 # ELF image loader
 #
 import os
+import subprocess
 from bisect import bisect
 
 from musashi.m68k import (
@@ -32,17 +33,18 @@ class image(object):
         self._lineinfo_cache = dict()
         self._symbol_cache = dict()
         self._address_cache = dict()
-        self._addr2line = self._findtool('m68k-elf-addr2line')
+        self._addr2line = self._findtool('addr2line')
         self._text_base = 0
         self._text_end = 0
         self._low_sym = 0xffffffff
         self._high_sym = 0
+        self._image_filename = image_filename
 
         if self._addr2line is None:
             raise RuntimeError(
-                "unable to find m68k-elf-addr2line and/or m68k-elf-readelf, check your PATH")
+                "unable to find m68k addr2line, check your PATH")
 
-        elf_fd = open(image_filename, "rb")
+        elf_fd = open(self._image_filename, "rb")
         self._elf = ELFFile(elf_fd)
 
         if self._elf.header['e_type'] != 'ET_EXEC':
@@ -95,11 +97,14 @@ class image(object):
             self._address_cache[s_name] = s_addr
 
     def _findtool(self, tool):
-        for path in os.environ['PATH'].split(os.pathsep):
-            path = path.strip('"')
-            candidate = os.path.join(path, tool)
-            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-                return candidate
+        for prefix in ['m68k-elf-', 'm68k-unknown-elf-']:
+            for path in os.environ['PATH'].split(os.pathsep):
+                path = path.strip('"')
+                candidate = os.path.join(path, prefix + tool)
+                if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                    return candidate
+                else:
+                    print(f"no {candidate}")
         return None
 
     def lineinfo(self, addr):
@@ -114,13 +119,14 @@ class image(object):
             symb = subprocess.Popen([self._addr2line,
                                      '-pfC',
                                      '-e',
-                                     args.image,
+                                     self._image_filename,
                                      '{:#x}'.format(addr)],
                                     stdout=subprocess.PIPE)
             output, err = symb.communicate()
 
-            self._lineinfo_cache[addr] = output
-            return output
+            result = output.decode('ascii')
+            self._lineinfo_cache[addr] = result
+            return result
 
     def symname(self, addr):
         if addr < self._low_sym or addr >= self._high_sym:

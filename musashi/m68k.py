@@ -235,7 +235,7 @@ __dis_buf = create_string_buffer(80)
 
 def disassemble(pc, cpu_type):
     n = disassemble_func(__dis_buf, pc, cpu_type)
-    return str(__dis_buf.value)
+    return __dis_buf.value.decode('ascii')
 
 # --- MEM API ---
 
