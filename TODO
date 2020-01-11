@@ -1,5 +1,15 @@
 Things to investigate / fix:
+  ✔ fix disassembly printing as bytes object (b'...') @done (20-01-11 09:14)
+  ☐ tabs don't print correctly
+
+CF/ATA emulation:
+  ☐ reset behaviour
+    Can't be done for Tiny68k as /CS1 is permanently high
+  ✔ IDENTIFY DEVICE @done (20-01-11 09:14)
 
 Tiny68k:
   ☐ I2C realtime clock device
+  ☐ I2C EEPROM emulation
   
+EmuTOS:
+  ☐ LineA/LineF/Illegal instruction callbacks for Native Feature interfaces
