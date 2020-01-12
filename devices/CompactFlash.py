@@ -78,8 +78,9 @@ class CompactFlash(device):
             self._file_size = 0
             self._r_status = STATUS_DF
 
+        drive_size = int(self._file_size / SECTOR_SIZE)
         self._identify_data = struct.pack(
-            ''.join(('<',       # little endian
+            ''.join(('>',       # little endian
                      'H',       # 0: general config flags
                      'H',       # 1: #cylinders
                      '2x',      # 2: -
@@ -101,7 +102,8 @@ class CompactFlash(device):
                      'H',       # 53: 54-58, 64-70 validity flags
                      '10x',     # 54-58: -
                      'H',       # 59: max sectors / interrupt R/W multiple
-                     'L',       # 60-61: number of addressible sectors (LBA)
+                     'H',       # 60: number of addressible sectors (LBA:low)
+                     'H',       # 61: number of addressible sectors (LBA:high)
                      '2x',      # 62: -
                      'H',       # 63: DMA modes supported
                      '32x',     # 64-79: -
@@ -125,7 +127,8 @@ class CompactFlash(device):
             0,                              # 51
             0,                              # 53
             0,                              # 59
-            int(self._file_size / SECTOR_SIZE),  # 60-61
+            drive_size & 0xffff,            # 60
+            drive_size >> 16,               # 61
             0,                              # 63
             0,                              # 80
             0,                              # 81
