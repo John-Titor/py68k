@@ -361,6 +361,7 @@
 #define CALLBACK_PC_CHANGED  m68ki_cpu.pc_changed_callback
 #define CALLBACK_SET_FC      m68ki_cpu.set_fc_callback
 #define CALLBACK_INSTR_HOOK  m68ki_cpu.instr_hook_callback
+#define CALLBACK_LINEAF_HOOK m68ki_cpu.lineaf_hook_callback
 
 
 
@@ -470,6 +471,15 @@
 	#define m68ki_pc_changed(A, V)
 #endif /* M68K_MONITOR_PC */
 
+#if M68K_LINEAF_HOOK
+	#if M68K_LINEAF_HOOK == OPT_SPECIFY_HANDLER
+		#define m68ki_lineaf_hook(I) M68K_LINEAF_CALLBACK(I)
+	#else
+		#define m68ki_lineaf_hook(I) CALLBACK_LINEAF_HOOK(I)
+	#endif
+#else
+	#define m68ki_lineaf_hook(I)
+#endif /* M68K_LINEAF_HOOK */
 
 /* Enable or disable function code emulation */
 #if M68K_EMULATE_FC
@@ -845,6 +855,7 @@ typedef struct
 				    unsigned int vector); /* Called when the PC changes by a large amount */
 	void (*set_fc_callback)(unsigned int new_fc);     /* Called when the CPU function code changes */
 	void (*instr_hook_callback)(void);                /* Called every instruction cycle prior to execution */
+	int  (*lineaf_hook_callback)(unsigned int opcode); /* Called for LineA / LineF instructions */
 
 } m68ki_cpu_core;
 
@@ -1803,13 +1814,17 @@ INLINE void m68ki_exception_1010(void)
 					 m68ki_cpu_names[CPU_TYPE], ADDRESS_68K(REG_PPC), REG_IR,
 					 m68ki_disassemble_quick(ADDRESS_68K(REG_PPC))));
 #endif
+#if M68K_LINEAF_HOOK == OPT_ON
+	if (!m68ki_lineaf_hook(REG_IR))
+#endif
+	{
+		sr = m68ki_init_exception();
+		m68ki_stack_frame_0000(REG_PPC, sr, EXCEPTION_1010);
+		m68ki_jump_vector(EXCEPTION_1010);
 
-	sr = m68ki_init_exception();
-	m68ki_stack_frame_0000(REG_PPC, sr, EXCEPTION_1010);
-	m68ki_jump_vector(EXCEPTION_1010);
-
-	/* Use up some clock cycles and undo the instruction's cycles */
-	USE_CYCLES(CYC_EXCEPTION[EXCEPTION_1010] - CYC_INSTRUCTION[REG_IR]);
+		/* Use up some clock cycles and undo the instruction's cycles */
+		USE_CYCLES(CYC_EXCEPTION[EXCEPTION_1010] - CYC_INSTRUCTION[REG_IR]);
+	}
 }
 
 /* Exception for F-Line instructions */
@@ -1823,12 +1838,17 @@ INLINE void m68ki_exception_1111(void)
 					 m68ki_disassemble_quick(ADDRESS_68K(REG_PPC))));
 #endif
 
-	sr = m68ki_init_exception();
-	m68ki_stack_frame_0000(REG_PPC, sr, EXCEPTION_1111);
-	m68ki_jump_vector(EXCEPTION_1111);
+#if M68K_LINEAF_HOOK == OPT_ON
+	if (!m68ki_lineaf_hook(REG_IR))
+#endif
+	{
+		sr = m68ki_init_exception();
+		m68ki_stack_frame_0000(REG_PPC, sr, EXCEPTION_1111);
+		m68ki_jump_vector(EXCEPTION_1111);
 
-	/* Use up some clock cycles and undo the instruction's cycles */
-	USE_CYCLES(CYC_EXCEPTION[EXCEPTION_1111] - CYC_INSTRUCTION[REG_IR]);
+		/* Use up some clock cycles and undo the instruction's cycles */
+		USE_CYCLES(CYC_EXCEPTION[EXCEPTION_1111] - CYC_INSTRUCTION[REG_IR]);
+	}
 }
 
 /* Exception for illegal instructions */

@@ -262,7 +262,16 @@ void m68k_set_fc_callback(void  (*callback)(unsigned int new_fc));
  */
 void m68k_set_instr_hook_callback(void  (*callback)(void));
 
-
+/* Set a callback for LineA/LineF instructions.
+ * You must enable M68K_LINEAF_HOOK in m68kconf.h.
+ * The CPU calls this callback just before triggering the exception
+ * when a LineA / LineF opcode is encountered.
+ * If the callback returns nonzero, the instruction is treated as legal
+ * and the exception will not be taken.
+ * Default behaviour: all LineA / LineF opcodes trigger their corresponding
+ * exceptions.
+ */
+void m68k_set_lineaf_hook_callback(int (*callback)(unsigned int opcode));
 
 /* ======================================================================== */
 /* ====================== FUNCTIONS TO ACCESS THE CPU ===================== */

@@ -134,6 +134,15 @@
 #define M68K_INSTRUCTION_HOOK       OPT_ON
 #define M68K_INSTRUCTION_CALLBACK() your_instruction_hook_function()
 
+/* If ON, CPU will call the LineA/F hook callback every time a LineA / LineF
+ * instruction is encountered. 
+ * If the callback returns nonzero, the instruction will not generate
+ * an exception. 
+ * This provides a way for code to interact with the emulator.
+ * */
+#define M68K_LINEAF_HOOK			OPT_ON
+#define M68K_LINEAF_CALLBACK()		your_lineaf_hook_function()
+
 
 /* If ON, the CPU will emulate the 4-byte prefetch queue of a real 68000 */
 #define M68K_EMULATE_PREFETCH       OPT_OFF

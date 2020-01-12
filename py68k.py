@@ -132,6 +132,9 @@ parser.add_argument('--debug-device',
                     default='',
                     help='comma-separated list of devices to enable debug tracing, \'device\''
                     ' to trace device framework')
+parser.add_argument('--enable-linea-logging',
+                    action='store_true',
+                    help='enable LineA-based logging from the emulated program')
 parser.add_argument('--diskfile',
                     type=str,
                     default=None,

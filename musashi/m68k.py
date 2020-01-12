@@ -95,6 +95,7 @@ invalid_func_type = CFUNCTYPE(None, c_int, c_int, c_uint)
 trace_func_type = CFUNCTYPE(c_int, c_int, c_int, c_uint, c_uint)
 instr_hook_callback_func = CFUNCTYPE(None)
 int_ack_callback_func = CFUNCTYPE(c_int, c_int)
+lineaf_callback_func = CFUNCTYPE(c_int, c_uint)
 
 # declare cpu functions
 cpu_init_func = lib.m68k_init
@@ -188,6 +189,12 @@ def set_int_ack_callback(func):
     global int_ack_callback
     int_ack_callback = int_ack_callback_func(func)
     lib.m68k_set_int_ack_callback(int_ack_callback)
+
+
+def set_lineaf_callback(func):
+    global lineaf_callback
+    lineaf_callback = lineaf_callback_func(func)
+    lib.m68k_set_lineaf_hook_callback(lineaf_callback)
 
 
 def set_cpu_type(t):

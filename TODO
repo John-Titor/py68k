@@ -1,6 +1,7 @@
 Things to investigate / fix:
   ✔ fix disassembly printing as bytes object (b'...') @done (20-01-11 09:14)
   ☐ tabs don't print correctly
+  ☐ add reset hook & pass reset to peripherals
 
 CF/ATA emulation:
   ☐ reset behaviour
