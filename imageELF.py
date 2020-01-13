@@ -12,6 +12,7 @@ from musashi.m68k import (
 # note - package is 'pyelftools'
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
+from elftools.elf.enums import ENUM_P_TYPE_BASE
 from elftools.elf.constants import SH_FLAGS
 from elftools.elf.descriptions import (
     describe_e_machine,
@@ -59,17 +60,26 @@ class image(object):
 
             # does this section need to be loaded?
             if section['sh_flags'] & SH_FLAGS.SHF_ALLOC:
-                p_addr = section['sh_addr']
+                p_vaddr = section['sh_addr']
+                p_paddr = p_vaddr
                 p_size = section['sh_size']
-                self._emu.log(
-                    '{} {:#x}/{:#x} '.format(section.name, p_addr, p_size))
+
+                # load address may not equal run address, but the section 
+                # doesn't know that
+                for segment in self._elf.iter_segments():
+                    if segment.section_in_segment(section):
+                        if segment['p_paddr'] != 0:
+                            p_paddr -= segment['p_vaddr'] - segment['p_paddr']
+                            break
+
+                self._emu.log(f'{section.name} 0x{p_vaddr:x}/{p_size} @ 0x{p_paddr:x}')
 
                 # XXX should really be a call on the emulator
-                mem_ram_write_block(p_addr, p_size, section.data())
+                mem_ram_write_block(p_paddr, p_size, section.data())
 
                 if section.name == '.text':
-                    self._text_base = p_addr
-                    self._text_end = p_addr + p_size
+                    self._text_base = p_paddr
+                    self._text_end = p_paddr + p_size
 
             # does it contain symbols?
             if isinstance(section, SymbolTableSection):
