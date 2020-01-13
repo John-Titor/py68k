@@ -104,7 +104,7 @@ class Emulator(object):
         self._root_device = None
 
         # initialise tracing
-        self._trace_file = open(args.trace_file, "w")
+        self._trace_file = open(args.trace_file, "w", 1)
         self._trace_memory = False
         self._trace_instructions = False
         self._trace_jumps = False
@@ -281,6 +281,7 @@ class Emulator(object):
         msg = '{:>10}: {:>40} : {}'.format(action, afield, info.strip())
 
         self._trace_file.write(msg + '\n')
+
 
     def _trace_trigger(self, address, kind, actions):
         self.trace('TRIGGER', address, '{} trigger'.format(kind))
