@@ -27,7 +27,6 @@ from musashi.m68k import (
     set_instr_hook_callback,
     set_pc_changed_callback,
     set_reset_instr_callback,
-    set_lineaf_callback,
     M68K_CPU_TYPE_68000,
     M68K_CPU_TYPE_68010,
     M68K_CPU_TYPE_68020,
@@ -135,8 +134,7 @@ class Emulator(object):
         # attach unconditional callback functions
         set_reset_instr_callback(self.cb_trace_reset)
         mem_set_invalid_func(self.cb_buserror)
-        if args.enable_linea_logging:
-            set_lineaf_callback(self.cb_lineaf)
+        # XXX illegal instruction tracking for sim-only output? feature detection?
 
         # load the executable image
         self._image = self.loadImage(args.image)
@@ -308,32 +306,6 @@ class Emulator(object):
             get_reg(M68K_REG_PPC)))
         self.fatal(
             'BUS ERROR during {} 0x{:08x} - invalid memory'.format(cause, addr))
-
-    def cb_lineaf(self, opcode):
-        """
-        Handle a LineA/LineF opcoode
-        """
-
-        # STonX console output
-        if opcode == 0xa0ff:
-            message_ptrptr = get_reg(M68K_REG_SP) + 4
-            message_ptr = mem_ram_read(2, message_ptrptr)
-            while True:
-                char = chr(mem_ram_read(0, message_ptr))
-                if char == '\0':
-                    break
-                elif char == '\n':
-                    self.trace('MESSAGE', address=None, info=self._message_buffer)
-                    self._message_buffer = ''
-                else:
-                    self._message_buffer += char
-                message_ptr += 1
-            # skip trailing zero word
-            set_reg(M68K_REG_PC, get_reg(M68K_REG_PC) + 4)
-            return 1
-        else:
-            return 0
-
 
     def cb_trace_memory(self, mode, width, addr, value):
         """

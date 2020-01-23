@@ -2,3 +2,4 @@ trace.out
 *.pyc
 *.bin
 *.elf
+*.dSYM
