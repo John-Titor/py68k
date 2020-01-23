@@ -19,7 +19,6 @@ static mem_handler_t  mem_handler[MEM_NUM_PAGES];
 
 static invalid_func_t invalid_func;
 static int mem_trace = 0;
-static int mem_immediate_trace = 0;
 static trace_func_t trace_func;
 static trace_func_t device_func;
 static int is_end = 0;
@@ -207,11 +206,6 @@ unsigned int  m68k_read_memory_8(unsigned int address)
   return val;
 }
 
-unsigned int  m68k_read_pcrelative_8(unsigned int address)
-{
-  return m68k_read_memory_8(address);
-}
-
 unsigned int  m68k_read_memory_16(unsigned int address)
 {
   uint page = MEM_PAGE(address);
@@ -224,23 +218,6 @@ unsigned int  m68k_read_memory_16(unsigned int address)
   return val;
 }
 
-unsigned int  m68k_read_immediate_16(unsigned int address)
-{
-  uint page = MEM_PAGE(address);
-  uint val = mem_handler[page].r16(address);
-  if(mem_immediate_trace) {
-    if(trace_func('I',1,address,val)) {
-      set_all_to_end();
-    }
-  }
-  return val;
-}
-
-unsigned int  m68k_read_pcrelative_16(unsigned int address)
-{
-  return m68k_read_memory_16(address);
-}
-
 unsigned int  m68k_read_memory_32(unsigned int address)
 {
   uint page = MEM_PAGE(address);
@@ -251,23 +228,6 @@ unsigned int  m68k_read_memory_32(unsigned int address)
     }
   }
   return val;
-}
-
-unsigned int  m68k_read_immediate_32(unsigned int address)
-{
-  uint page = MEM_PAGE(address);
-  uint val = mem_handler[page].r32(address);
-  if(mem_immediate_trace) {
-    if(trace_func('I',2,address,val)) {
-      set_all_to_end();
-    }
-  }
-  return val;
-}
-
-unsigned int  m68k_read_pcrelative_32(unsigned int address)
-{
-  return m68k_read_memory_32(address);
 }
 
 void m68k_write_memory_8(unsigned int address, unsigned int value)

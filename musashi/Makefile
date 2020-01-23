@@ -11,57 +11,34 @@ else
 CC = gcc
 SO_EXT = so
 endif
-CFLAGS = -g -O3 -fPIC
 
-BUILD_DIR = BUILD
-
-SRC = mem.c m68kcpu.c m68kdasm.c
+SRC = mem.c m68kcpu.c m68kdasm.c softfloat/softfloat.c
 HDR = mem.h m68k.h m68kcpu.h m68kconf.h
-OBJ = $(patsubst %.c,$(BUILD_DIR)/%.o,$(SRC))
 
 GEN_INPUT = m68k_in.c
 
-GEN_SRC = m68kopac.c m68kopdm.c m68kopnz.c m68kops.c
+GEN_SRC = m68kops.c
 GEN_HDR = m68kops.h
 GEN_FILES = $(GEN_SRC) $(GEN_HDR)
-GEN_OBJ = $(patsubst %.c,$(BUILD_DIR)/%.o,$(GEN_SRC))
 
 GEN_TOOL_SRC = m68kmake.c
-GEN_TOOL_OBJ = $(patsubst %.c,$(BUILD_DIR)/%.o,$(GEN_TOOL_SRC))
 GEN_TOOL = m68kmake
 
 ALL_SRC = $(SRC) $(GEN_SRC)
-ALL_OBJ = $(OBJ) $(GEN_OBJ)
+ALL_HDR = $(HDR) $(GEN_HDR)
 
 LIB = libmusashi.$(SO_EXT)
 
-all: build
+all: $(LIB)
 
-build: $(BUILD_DIR) $(LIB)
-
-$(SRC): $(GEN_HDR) $(HDR)
-
-$(BUILD_DIR):
-	mkdir $(BUILD_DIR)
-
-gen: $(GEN_TOOL) $(GEN_OBJ)
-
-$(GEN_TOOL): $(BUILD_DIR) $(GEN_TOOL_OBJ)
-	$(CC) $(CFLAGS) -o $@ $(GEN_TOOL_OBJ)
+$(GEN_TOOL): $(GEN_TOOL_SRC)
+	$(CC) -O3 -o $@ $(GEN_TOOL_SRC)
 
 $(GEN_FILES): $(GEN_TOOL) $(GEN_INPUT)
 	./$(GEN_TOOL)
 
-$(LIB): $(ALL_OBJ)
-	$(CC) -shared -o $@ $(ALL_OBJ)
+$(LIB): $(ALL_SRC) $(ALL_HDR)
+	$(CC) -O3 -fPIC -shared -o $@ $(ALL_SRC)
 
-clean: clean_gen
-	rm -f $(GEN_TOOL)
-	rm -rf $(BUILD_DIR)
-	rm -f $(LIB)
-
-clean_gen:
-	rm -f $(GEN_FILES)
-
-$(BUILD_DIR)/%.o: %.c
-	$(CC) $(CFLAGS) -c -o $@ $<
+clean:
+	rm -f $(GEN_TOOL) $(GEN_FILES) $(LIB)
