@@ -43,6 +43,11 @@ class Console(device):
         self._vt_screen.attach(self._vt_stream)
         self._buffered_output = u''
 
+    @classmethod
+    def add_arguments(cls, parser):
+        """add arguments to be pased as args to __init__"""
+        pass
+
     def _fmt(self, val):
         str = '0x{:02x} \'{}\''.format(val, curses.keyname(val))
         return str

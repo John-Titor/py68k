@@ -44,6 +44,11 @@ class device(object):
 
         self._debug = self._name in args.debug_device
 
+    @classmethod
+    def add_arguments(cls, parser):
+        """add argument definitions for args passed to __init__"""
+        pass
+
     def map_registers(self, registers):
         """
         Map device registers

@@ -149,6 +149,11 @@ class CompactFlash(device):
         self._current_mode = AMODE_NONE
         self._bytes_remaining = 0
 
+    @classmethod
+    def add_arguments(cls, parser):
+        """add argument definitions for args passed to __init__"""
+        pass
+
     def read(self, width, offset):
         if offset == REG_DATA16:
             value = self._io_read(width)

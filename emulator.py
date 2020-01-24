@@ -27,9 +27,17 @@ from musashi.m68k import (
     set_instr_hook_callback,
     set_pc_changed_callback,
     set_reset_instr_callback,
+    M68K_CPU_TYPE_INVALID,
     M68K_CPU_TYPE_68000,
     M68K_CPU_TYPE_68010,
+    M68K_CPU_TYPE_68EC020,
     M68K_CPU_TYPE_68020,
+    M68K_CPU_TYPE_68EC030,
+    M68K_CPU_TYPE_68030,
+    M68K_CPU_TYPE_68EC040,
+    M68K_CPU_TYPE_68LC040,
+    M68K_CPU_TYPE_68040,
+    M68K_CPU_TYPE_SCC68070,
     M68K_IRQ_1,
     M68K_IRQ_2,
     M68K_IRQ_3,
@@ -93,7 +101,7 @@ class Emulator(object):
 
     cpu_frequency = 8
 
-    def __init__(self, args, memory_size):
+    def __init__(self, args, memory_size, cpu="68000"):
 
         self._dead = False
         self._exception_info = None
@@ -127,7 +135,29 @@ class Emulator(object):
         self._quantum = self.cpu_frequency * 1000  # ~1ms
 
         # intialise the CPU
-        self._cpu_type = M68K_CPU_TYPE_68000
+        if cpu == "68000":
+            self._cpu_type = M68K_CPU_TYPE_68000
+        elif cpu == "68010":
+            self._cpu_type = M68K_CPU_TYPE_68010
+        elif cpu == "68EC020":
+            self._cpu_type = M68K_CPU_TYPE_68EC020
+        elif cpu == "68020":
+            self._cpu_type = M68K_CPU_TYPE_68020
+        elif cpu == "68EC030":
+            self._cpu_type = M68K_CPU_TYPE_68EC030
+        elif cpu == "68030":
+            self._cpu_type = M68K_CPU_TYPE_68030
+        elif cpu == "68EC040":
+            self._cpu_type = M68K_CPU_TYPE_68EC040
+        elif cpu == "68LC040":
+            self._cpu_type = M68K_CPU_TYPE_68LC040
+        elif cpu == "68040":
+            self._cpu_type = M68K_CPU_TYPE_68040
+        elif cpu == "SCC68070":
+            self._cpu_type = M68K_CPU_TYPE_SCC68070
+        else:
+            raise RuntimeError(f"unsupported CPU: {cpu}")
+
         set_cpu_type(self._cpu_type)
         cpu_init()
 
@@ -136,8 +166,114 @@ class Emulator(object):
         mem_set_invalid_func(self.cb_buserror)
         # XXX illegal instruction tracking for sim-only output? feature detection?
 
+        # set tracing options
+        if args.trace_memory or args.trace_everything:
+            self.trace_enable('memory')
+        for i in args.trace_read_trigger:
+            self.trace_enable('read-trigger', i)
+        for i in args.trace_write_trigger:
+            self.trace_enable('write-trigger', i)
+        if args.trace_instructions or args.trace_everything:
+            self.trace_enable('instructions')
+        for i in args.trace_instruction_trigger:
+            self.trace_enable('instruction-trigger', i)
+        if args.trace_jumps or args.trace_everything:
+            self.trace_enable('jumps')
+        if args.trace_exceptions or args.trace_everything:
+            self.trace_enable('exceptions')
+        for i in args.trace_exception:
+            self.trace_enable('exception', i)
+        if args.trace_cycle_limit > 0:
+            self.trace_enable('trace-cycle-limit', args.trace_cycle_limit)
+        if args.trace_check_PC_in_text or args.trace_everything:
+            self.trace_enable('check-pc-in-text')
+        if args.cycle_limit > 0:
+            self._cycle_limit = args.cycle_limit
+        else:
+            self._cycle_limit = float('inf')
+
         # load the executable image
         self._image = self.loadImage(args.image)
+
+    @classmethod
+    def add_arguments(cls, parser):
+
+        parser.add_argument('--trace-file',
+                            type=str,
+                            default='trace.out',
+                            help='file to which trace output will be written')
+        parser.add_argument('--cycle-limit',
+                            type=int,
+                            default=float('inf'),
+                            metavar='CYCLES',
+                            help='stop the emulation after CYCLES machine cycles')
+        parser.add_argument('--trace-everything',
+                            action='store_true',
+                            help='enable all tracing options')
+        parser.add_argument('--trace-memory',
+                            action='store_true',
+                            help='enable memory tracing at startup')
+        parser.add_argument('--trace-read-trigger',
+                            action='append',
+                            type=str,
+                            default=list(),
+                            metavar='ADDRESS-or-NAME',
+                            help='enable memory tracing when ADDRESS-or-NAME is read')
+        parser.add_argument('--trace-write-trigger',
+                            action='append',
+                            type=str,
+                            default=list(),
+                            metavar='ADDRESS-or-NAME',
+                            help='enable memory tracing when ADDRESS-or-NAME is written')
+        parser.add_argument('--trace-instructions',
+                            action='store_true',
+                            help='enable instruction tracing at startup (implies --trace-jumps)')
+        parser.add_argument('--trace-instruction-trigger',
+                            action='append',
+                            type=str,
+                            default=list(),
+                            metavar='ADDRESS-or-NAME',
+                            help='enable instruction and jump tracing when execution reaches ADDRESS-or-NAME')
+        parser.add_argument('--trace-jumps',
+                            action='store_true',
+                            help='enable branch tracing at startup')
+        parser.add_argument('--trace-exceptions',
+                            action='store_true',
+                            help='enable tracing all exceptions at startup')
+        parser.add_argument('--trace-exception',
+                            type=int,
+                            action='append',
+                            default=list(),
+                            metavar='EXCEPTION',
+                            help='enable tracing for EXCEPTION at startup (may be specified more than once)')
+        parser.add_argument('--trace-io',
+                            action='store_true',
+                            help='enable tracing of I/O space accesses')
+        parser.add_argument('--trace-cycle-limit',
+                            type=int,
+                            default=0,
+                            metavar='CYCLES',
+                            help='stop the emulation after CYCLES following an instruction or memory trigger')
+        parser.add_argument('--trace-check-PC-in-text',
+                            action='store_true',
+                            help='when tracing instructions, stop if the PC lands outside the text section')
+        parser.add_argument('--debug-device',
+                            type=str,
+                            default='',
+                            help='comma-separated list of devices to enable debug tracing, \'device\''
+                            ' to trace device framework')
+        parser.add_argument('--enable-linea-logging',
+                            action='store_true',
+                            help='enable LineA-based logging from the emulated program')
+        parser.add_argument('--diskfile',
+                            type=str,
+                            default=None,
+                            help='disk image file')
+        parser.add_argument('image',
+                            type=str,
+                            default='none',
+                            metavar='IMAGE',
+                            help='executable to load')
 
     def loadImage(self, image_filename):
         try:
@@ -154,14 +290,13 @@ class Emulator(object):
 
         return image
 
-    def run(self, cycle_limit=float('inf')):
+    def run(self):
         signal.signal(signal.SIGINT, self._keyboard_interrupt)
 
         # reset the CPU ready for execution
         pulse_reset()
 
         self._start_time = time.time()
-        self._cycle_limit = cycle_limit
         while not self._dead:
             cycles_to_run = self._root_device.tick()
             if (cycles_to_run == 0) or (cycles_to_run > self._quantum):

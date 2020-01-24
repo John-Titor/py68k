@@ -43,6 +43,11 @@ class Channel():
         self.reset()
         self._parent = parent
 
+    @classmethod
+    def add_arguments(cls, parser):
+        """add argument definitions for args passed to __init__"""
+        pass
+
     def reset(self):
         self._mr1 = 0
         self._mr2 = 0
