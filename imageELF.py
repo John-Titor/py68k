@@ -6,7 +6,7 @@ import subprocess
 from bisect import bisect
 
 from musashi.m68k import (
-    mem_ram_write_block
+    mem_write_bulk
 )
 
 # note - package is 'pyelftools'
@@ -75,7 +75,7 @@ class image(object):
                 self._emu.log(f'{section.name} 0x{p_vaddr:x}/{p_size} @ 0x{p_paddr:x}')
 
                 # XXX should really be a call on the emulator
-                mem_ram_write_block(p_paddr, p_size, section.data())
+                mem_write_bulk(p_paddr, section.data())
 
                 if section.name == '.text':
                     self._text_base = p_paddr

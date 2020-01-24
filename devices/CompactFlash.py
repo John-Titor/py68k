@@ -152,7 +152,12 @@ class CompactFlash(device):
     @classmethod
     def add_arguments(cls, parser):
         """add argument definitions for args passed to __init__"""
-        pass
+
+        parser.add_argument('--diskfile',
+                            type=str,
+                            default=None,
+                            help='CF disk image file')
+
 
     def read(self, width, offset):
         if offset == REG_DATA16:

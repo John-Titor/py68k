@@ -43,11 +43,6 @@ class Channel():
         self.reset()
         self._parent = parent
 
-    @classmethod
-    def add_arguments(cls, parser):
-        """add argument definitions for args passed to __init__"""
-        pass
-
     def reset(self):
         self._mr1 = 0
         self._mr2 = 0
@@ -328,6 +323,11 @@ class MC68681(device):
         self.trace('init done')
 
         device.root_device.register_console_input_driver(self._a)
+
+    @classmethod
+    def add_arguments(cls, parser):
+        """add argument definitions for args passed to __init__"""
+        return
 
     def read(self, width, offset):
         regsel = offset & MC68681.REG_SELMASK

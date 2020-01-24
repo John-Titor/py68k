@@ -4,8 +4,7 @@
 import os
 
 from musashi.m68k import (
-    mem_ram_write_block,
-    mem_ram_read
+    mem_write_bulk,
 )
 
 
@@ -14,7 +13,7 @@ class image(object):
     Load a binary image
     """
 
-    def __init__(self, emu, image_filename):
+    def __init__(self, emu, image_filename, max_size=-1):
         """
         Set up to read the image
         """
@@ -22,10 +21,10 @@ class image(object):
         self._emu = emu
         self._text_base = 0
 
-        bytes = open(image_filename, "rb").read()
-        self._text_end = len(bytes)
+        bytes = open(image_filename, "rb").read(max_size)
+        self._text_end = self._text_base + len(bytes)
 
-        mem_ram_write_block(self._text_base, self._text_end, bytes)
+        mem_write_bulk(self._text_base, bytes)
 
         # check that the reset vector is sensible
         resvector = mem_ram_read(0x04, 2)

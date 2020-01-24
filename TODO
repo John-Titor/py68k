@@ -7,10 +7,35 @@ CF/ATA emulation:
   ☐ reset behaviour
     Can't be done for Tiny68k as /CS1 is permanently high
   ✔ IDENTIFY DEVICE @done (20-01-11 09:14)
+  ✔ option to set disk file @done (20-01-25 21:40)
 
 Tiny68k:
   ☐ I2C realtime clock device
   ☐ I2C EEPROM emulation
+  ✔ --rom commandline argument, loads ROM -> RAM at startup @done (20-01-25 21:37)
+  ✔ emulator.add_reset_hook -> call at reset @done (20-01-25 22:34)
+  ✔ emulator.add_memory @done (20-01-25 22:52)
+  ☐ emulator support ELF both to load and just for symbols
+  ☐ emulator.cb_buserror <- do something useful here
+  ☐ device registration base/length -> mem_add_device
+  ☐ use mapping handle to find devices faster? (limitation of 1 device per page regardless...)
+
+P90MB:
+  ☐ need new memory model, support multiple disjoint memories (RAM, ROM), > 16MiB
+    ✔ implement m68k_read/write_memory_8/16/32(), m68k_read_disassembler_16/32 @done (20-01-24 21:51)
+    ✔ add_memory_range(base, size, writable, with_contents(optional)) @done (20-01-24 22:38)
+    ✔ add_device_range(base, size, ID) @done (20-01-24 22:38)
+    ✔ bus error should be optional @done (20-01-24 21:51)
+    ✔ flat mapping table for all of 32-bit space, one entry per mapping unit (e.g. 4k) @done (20-01-24 21:51)
+    ✔ table entry: valid bit, writable bit, handler ID @done (20-01-24 21:51)
+    ✔ handlers for memory, device @done (20-01-24 21:51)
+    ✔ emulator access to memory @done (20-01-25 23:24)
+  ☐ device models
+  ☐ --rom commandline argument, places code in ROM
+
+Simple:
+  ☐ fix device models
+  ☐ test cases
   
 EmuTOS:
-  ☐ LineA/LineF/Illegal instruction callbacks for Native Feature interfaces
+  ☐ Illegal instruction callbacks for Native Feature interfaces

@@ -12,8 +12,8 @@ CC = gcc
 SO_EXT = so
 endif
 
-SRC = mem.c m68kcpu.c m68kdasm.c softfloat/softfloat.c
-HDR = mem.h m68k.h m68kcpu.h m68kconf.h
+SRC = memory.c m68kcpu.c m68kdasm.c softfloat/softfloat.c
+HDR = memory.h m68k.h m68kcpu.h m68kconf.h
 
 GEN_INPUT = m68k_in.c
 

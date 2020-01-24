@@ -156,6 +156,11 @@ static mem_handler_t mem_ram_handler = {
   w8_ram, w16_ram, w32_ram
 };
 
+static mem_handler_t mem_rom_handler = {
+  r8_ram, r16_ram, r32_ram,
+  w8_fail, w16_fail, w32_fail
+};
+
 /* ----- device access ----- */
 static uint r8_device(uint addr)
 {

@@ -8,25 +8,8 @@ import imageELF
 import imageBIN
 
 from musashi.m68k import (
-    cpu_init,
-    disassemble,
-    cycles_run,
-    end_timeslice,
-    execute,
-    get_reg,
-    set_reg,
-    mem_init,
-    mem_is_end,
-    mem_ram_write_block,
-    mem_set_invalid_func,
-    mem_set_trace_func,
-    mem_set_trace_mode,
-    mem_ram_read,
-    pulse_reset,
-    set_cpu_type,
-    set_instr_hook_callback,
-    set_pc_changed_callback,
-    set_reset_instr_callback,
+
+    # Musashi API
     M68K_CPU_TYPE_INVALID,
     M68K_CPU_TYPE_68000,
     M68K_CPU_TYPE_68010,
@@ -69,7 +52,29 @@ from musashi.m68k import (
     M68K_REG_ISP,
     M68K_MODE_READ,
     M68K_MODE_WRITE,
-    M68K_MODE_FETCH
+    M68K_MODE_FETCH,
+
+    cpu_init,
+    disassemble,
+    cycles_run,
+    end_timeslice,
+    execute,
+    get_reg,
+    set_reg,
+    pulse_reset,
+    set_cpu_type,
+    set_instr_hook_callback,
+    set_pc_changed_callback,
+    set_reset_instr_callback,
+    set_illg_instr_callback,
+
+    # Memory API
+    mem_add_memory,
+    mem_set_trace_handler,
+    mem_enable_tracing,
+    mem_enable_bus_error,
+    mem_read_memory,
+    mem_write_memory,
 )
 
 
@@ -101,7 +106,7 @@ class Emulator(object):
 
     cpu_frequency = 8
 
-    def __init__(self, args, memory_size, cpu="68000"):
+    def __init__(self, args, cpu="68000"):
 
         self._dead = False
         self._exception_info = None
@@ -124,15 +129,16 @@ class Emulator(object):
         self._trace_exception_list = list()
         self._trace_jump_cache = dict()
 
+        # 'native features' stderr channel buffer
         self._message_buffer = ''
-
-        # allocate memory for the emulation
-        mem_init(memory_size)
 
         # time
         self._elapsed_cycles = 0
         self._device_deadline = 0
         self._quantum = self.cpu_frequency * 1000  # ~1ms
+
+        # reset callbacks
+        self._reset_hooks = list()
 
         # intialise the CPU
         if cpu == "68000":
@@ -162,9 +168,8 @@ class Emulator(object):
         cpu_init()
 
         # attach unconditional callback functions
-        set_reset_instr_callback(self.cb_trace_reset)
-        mem_set_invalid_func(self.cb_buserror)
-        # XXX illegal instruction tracking for sim-only output? feature detection?
+        set_reset_instr_callback(self.cb_reset)
+        set_illg_instr_callback(self.cb_illg)
 
         # set tracing options
         if args.trace_memory or args.trace_everything:
@@ -192,8 +197,11 @@ class Emulator(object):
         else:
             self._cycle_limit = float('inf')
 
-        # load the executable image
-        self._image = self.loadImage(args.image)
+        # add symbol files
+        self._symbol_files = args.symbols
+
+        # XXX load the executable image
+        # self._image = self.loadImage(args.image)
 
     @classmethod
     def add_arguments(cls, parser):
@@ -257,23 +265,16 @@ class Emulator(object):
         parser.add_argument('--trace-check-PC-in-text',
                             action='store_true',
                             help='when tracing instructions, stop if the PC lands outside the text section')
-        parser.add_argument('--debug-device',
+        parser.add_argument('--symbols',
                             type=str,
-                            default='',
-                            help='comma-separated list of devices to enable debug tracing, \'device\''
-                            ' to trace device framework')
-        parser.add_argument('--enable-linea-logging',
-                            action='store_true',
-                            help='enable LineA-based logging from the emulated program')
-        parser.add_argument('--diskfile',
-                            type=str,
-                            default=None,
-                            help='disk image file')
-        parser.add_argument('image',
-                            type=str,
-                            default='none',
-                            metavar='IMAGE',
-                            help='executable to load')
+                            action='append',
+                            metavar='ELF-SYMFILE',
+                            help='add ELF objects containing symbols for symbolicating trace')
+#        parser.add_argument('image',
+#                            type=str,
+#                            default='none',
+#                            metavar='IMAGE',
+#                            help='executable to load')
 
     def loadImage(self, image_filename):
         try:
@@ -314,12 +315,18 @@ class Emulator(object):
         self.trace('END', info='{} cycles in {} seconds, {} cps'.format(self.current_cycle,
                                                                         elapsed_time,
                                                                         int(self.current_cycle / elapsed_time)))
-
         try:
             self._trace_file.flush()
             self._trace_file.close()
         except Exception:
             pass
+
+    def add_memory(self, base, size, writable=True, contents=None):
+        """
+        Add RAM/ROM to the emulation
+        """
+        if not mem_add_memory(base, size, writable, contents):
+            raise RuntimeError(f"failed to add memory 0x{base:x}/{size}")
 
     def add_device(self, args, dev, address=None, interrupt=None):
         """
@@ -330,6 +337,12 @@ class Emulator(object):
         else:
             self._root_device.add_device(
                 args=args, dev=dev, address=address, interrupt=interrupt)
+
+    def add_reset_hook(self, hook):
+        """
+        Add a callback function to be called at reset time
+        """
+        self._reset_hooks.append(hook)
 
     @property
     def current_time(self):
@@ -415,7 +428,6 @@ class Emulator(object):
 
         self._trace_file.write(msg + '\n')
 
-
     def _trace_trigger(self, address, kind, actions):
         self.trace('TRIGGER', address, '{} trigger'.format(kind))
         for action in actions:
@@ -497,18 +509,26 @@ class Emulator(object):
         except Exception:
             self.fatal_exception(sys.exc_info())
 
-    def cb_trace_reset(self):
+    def cb_reset(self):
         """
         Trace reset instructions
         """
         # might want to end here due to memory issues
         end_timeslice()
 
-        # devices must reset
-        try:
-            self._root_device.reset()
-        except Exception:
-            self.fatal_exception(sys.exc_info())
+        # call reset hooks
+        for hook in self._reset_hooks:
+            try:
+                hook(self)
+            except Exception:
+                self.fatal_exception(sys.exc_info())
+
+    def cb_illg(self):
+        """
+        Illegal instruction handler - implement 'native features' emulator API
+        """
+        # instruction not handled by emulator
+        return 1
 
     def cb_trace_jump(self, new_pc, vector):
         """

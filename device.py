@@ -1,13 +1,20 @@
 import sys
 from musashi.m68k import (
-    set_irq,
-    set_int_ack_callback,
-    mem_set_device,
-    mem_set_device_handler,
-    get_reg,
+    # Musashi API
     M68K_REG_SR,
     M68K_IRQ_SPURIOUS,
-    M68K_IRQ_AUTOVECTOR
+    M68K_IRQ_AUTOVECTOR,
+
+    set_int_ack_callback,
+    set_irq,
+    get_reg,
+
+    # Memory API
+    DEV_READ,
+    DEV_WRITE,
+
+    mem_add_device,
+    mem_set_device_handler,
 )
 
 
@@ -31,11 +38,9 @@ class device(object):
 
     root_device = None
 
-    MODE_READ = 'R'
-    MODE_WRITE = 'W'
-    WIDTH_8 = 0
-    WIDTH_16 = 1
-    WIDTH_32 = 2
+    WIDTH_8 = 1
+    WIDTH_16 = 2
+    WIDTH_32 = 4
 
     def __init__(self, args, name, address=None, interrupt=None):
         self._name = name
@@ -47,7 +52,11 @@ class device(object):
     @classmethod
     def add_arguments(cls, parser):
         """add argument definitions for args passed to __init__"""
-        pass
+        parser.add_argument('--debug-device',
+                            type=str,
+                            default='',
+                            help='comma-separated list of devices to enable debug tracing, \'device\''
+                            ' to trace device framework')
 
     def map_registers(self, registers):
         """
@@ -164,6 +173,8 @@ class root_device(device):
         set_int_ack_callback(self.cb_int)
         mem_set_device_handler(self.cb_access)
 
+        emu.add_reset_hook(self.reset)
+
     def cb_int(self, interrupt):
         try:
             for dev in device._devices:
@@ -178,7 +189,8 @@ class root_device(device):
 
         return M68K_IRQ_SPURIOUS
 
-    def cb_access(self, mode, width, address, value):
+    def cb_access(self, operation, handle, offset, width, value):
+        address = handle + offset
         try:
             # look for a device
             if address not in device._register_to_device:
@@ -189,7 +201,7 @@ class root_device(device):
             # dispatch to device emulator
             dev = device._register_to_device[address]
             offset = address - dev._address
-            if chr(mode) == device.MODE_READ:
+            if chr(mode) == device.DEV_READ:
                 value = dev.read(width, offset)
 
                 if self._trace_io:
@@ -242,7 +254,7 @@ class root_device(device):
         self.check_interrupts()
         return deadline
 
-    def reset(self):
+    def reset(self, emu):
         for dev in device._devices:
             dev.reset()
 
