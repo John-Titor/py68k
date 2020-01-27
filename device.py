@@ -10,6 +10,7 @@ from musashi.m68k import (
     get_reg,
 
     # Memory API
+    MEM_PAGE_MASK,
     DEV_READ,
     DEV_WRITE,
 
@@ -45,6 +46,7 @@ class device(object):
     def __init__(self, args, name, address=None, interrupt=None):
         self._name = name
         self._address = address
+        self._size = 0
         self._interrupt = interrupt
 
         self._debug = self._name in args.debug_device
@@ -73,6 +75,9 @@ class device(object):
                     raise RuntimeError('register at {} already assigned to {}'.format(regaddr, other._name))
             device._register_to_device[regaddr] = self
             self._register_name_map[registers[reg]] = reg
+            # round up to next word address
+            if registers[reg] >= self._size:
+                self._size = (registers[reg] + MEM_PAGE_MASK) & ~MEM_PAGE_MASK
 
             if self._debug:
                 device._emu.trace('DEVICE', address=regaddr,
@@ -102,7 +107,15 @@ class device(object):
 
     @property
     def cycle_rate(self):
-        return self.root_device._emu.cpu_frequency
+        return self.root_device._emu.cycle_rate
+
+    @property
+    def address(self):
+        return self._address
+
+    @property
+    def size(self):
+        return self._size
 
     #
     # Methods that should be implemented by device models
@@ -159,11 +172,9 @@ class root_device(device):
     _console_output_driver = None
     _console_input_driver = None
 
-    def __init__(self, args, emu, address):
-        super(root_device, self).__init__(
-            args=args, name='root', address=address)
+    def __init__(self, args, emu):
+        super(root_device, self).__init__(args=args, name='root')
         device._emu = emu
-        device._device_base = address
         device.root_device = self
 
         device._debug = 'device' in args.debug_device
@@ -236,11 +247,10 @@ class root_device(device):
         return value
 
     def add_device(self, args, dev, address=None, interrupt=None):
-        if address is not None:
-            if address < self._device_base:
-                raise RuntimeError('device cannot be registered at 0x{:x} (outside device space)'.format(address))
-            mem_set_device(address)
         new_dev = dev(args=args, address=address, interrupt=interrupt)
+        if address is not None:
+            if not mem_add_device(address, new_dev.size, new_dev.address):
+                raise RuntimeError(f"could not map device @ 0x{address:x}/{size}")
         device._devices.append(new_dev)
 
     def tick(self):
@@ -248,8 +258,10 @@ class root_device(device):
         for dev in device._devices:
             ret = dev.tick()
             # let the device request an earlier deadline
-            if ret is not None and ret > 0 and ret < deadline:
-                deadline = ret
+            if ret is not None:
+                ret = int(ret)
+                if ret > 0 and ret < deadline:
+                    deadline = ret
 
         self.check_interrupts()
         return deadline

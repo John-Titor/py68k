@@ -49,7 +49,7 @@ actiongroup.add_argument('--list-targets',
 (args, _) = parser.parse_known_args()
 
 if args.list_targets:
-    p = Path("targets");
+    p = Path("targets")
     for module in p.glob("*.py"):
         print(f"    {module.stem}")
     sys.exit(0)

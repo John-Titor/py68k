@@ -64,7 +64,7 @@ class image(object):
                 p_paddr = p_vaddr
                 p_size = section['sh_size']
 
-                # load address may not equal run address, but the section 
+                # load address may not equal run address, but the section
                 # doesn't know that
                 for segment in self._elf.iter_segments():
                     if segment.section_in_segment(section):

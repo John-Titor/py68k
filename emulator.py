@@ -104,9 +104,7 @@ class Emulator(object):
         'SSP': M68K_REG_ISP
     }
 
-    cpu_frequency = 8
-
-    def __init__(self, args, cpu="68000"):
+    def __init__(self, args, cpu="68000", frequency=8000000):
 
         self._dead = False
         self._exception_info = None
@@ -133,9 +131,10 @@ class Emulator(object):
         self._message_buffer = ''
 
         # time
+        self._cpu_frequency = frequency
         self._elapsed_cycles = 0
         self._device_deadline = 0
-        self._quantum = self.cpu_frequency * 1000  # ~1ms
+        self._quantum = int(self._cpu_frequency / 1000)  # ~1ms in cycles
 
         # reset callbacks
         self._reset_hooks = list()
@@ -192,10 +191,11 @@ class Emulator(object):
             self.trace_enable('trace-cycle-limit', args.trace_cycle_limit)
         if args.trace_check_PC_in_text or args.trace_everything:
             self.trace_enable('check-pc-in-text')
+
         if args.cycle_limit > 0:
             self._cycle_limit = args.cycle_limit
         else:
-            self._cycle_limit = float('inf')
+            self._cycle_limit = sys.maxsize
 
         # add symbol files
         self._symbol_files = args.symbols
@@ -304,9 +304,6 @@ class Emulator(object):
                 cycles_to_run = self._quantum
             self._elapsed_cycles += execute(cycles_to_run)
 
-            if mem_is_end():
-                self.fatal('illegal memory access')
-
             if self._elapsed_cycles > self._cycle_limit:
                 self.fatal('cycle limit exceeded')
 
@@ -333,10 +330,12 @@ class Emulator(object):
         Attach a device to the emulator at the given offset in device space
         """
         if self._root_device is None:
-            self._root_device = dev(args=args, emu=self, address=address)
+            self._root_device = dev(args=args, emu=self)
         else:
-            self._root_device.add_device(
-                args=args, dev=dev, address=address, interrupt=interrupt)
+            self._root_device.add_device(args=args,
+                                         dev=dev,
+                                         address=address,
+                                         interrupt=interrupt)
 
     def add_reset_hook(self, hook):
         """
@@ -349,7 +348,7 @@ class Emulator(object):
         """
         Return the current time in microseconds since reset
         """
-        return self.current_cycle / self.cpu_frequency
+        return int(self.current_cycle / self._cpu_frequency)
 
     @property
     def current_cycle(self):
@@ -357,6 +356,10 @@ class Emulator(object):
         Return the number of the current clock cycle (cycles elapsed since reset)
         """
         return self._elapsed_cycles + cycles_run()
+
+    @property
+    def cycle_rate(self):
+        return self._cpu_frequency
 
     def trace_enable(self, what, option=None):
         """

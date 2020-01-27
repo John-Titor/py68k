@@ -76,6 +76,8 @@ M68K_MODE_READ = ord('R')
 M68K_MODE_WRITE = ord('W')
 M68K_MODE_FETCH = ord('I')
 
+MEM_PAGE_SIZE = 4096
+MEM_PAGE_MASK = MEM_PAGE_SIZE - 1
 MEM_READ = 0
 MEM_WRITE = 1
 DEV_READ = 2
@@ -92,106 +94,128 @@ def find_lib():
             return os.path.join(path, f)
     raise ImportError("Can't find musashi native lib")
 
+
 lib_file = find_lib()
 lib = CDLL(lib_file)
 
 # Musashi API
 
 int_ack_callback_func_type = CFUNCTYPE(c_int, c_int)
+bkpt_ack_callback_func_type = CFUNCTYPE(None, c_uint)
+reset_instr_callback_func_type = CFUNCTYPE(None)
+pc_changed_callback_func_type = CFUNCTYPE(None, c_uint)
+tas_instr_callback_func_type = CFUNCTYPE(c_int)
+illg_instr_callback_func_type = CFUNCTYPE(c_int, c_int)
+fc_callback_func_type = CFUNCTYPE(None, c_uint)
+instr_hook_callback_func_TYPE = CFUNCTYPE(None, c_uint)
+
 
 def set_int_ack_callback(func):
     global int_ack_callback
     int_ack_callback = int_ack_callback_func_type(func)
     lib.m68k_set_int_ack_callback(int_ack_callback)
 
-bkpt_ack_callback_func_type = CFUNCTYPE(None, c_uint)
 
 def set_bkpt_ack_callback(func):
     global bkpt_ack_callback
     bkpt_ack_callback = bkpt_ack_callback_func_type(func)
     lib.m68k_set_bkpt_ack_callback(bkpt_ack_callback)
 
-reset_instr_callback_func_type = CFUNCTYPE(None)
 
 def set_reset_instr_callback(func):
     global reset_instr_callback
     reset_instr_callback = reset_instr_callback_func_type(func)
     lib.m68k_set_reset_instr_callback(reset_instr_callback)
 
-pc_changed_callback_func_type = CFUNCTYPE(None, c_uint)
 
 def set_pc_changed_callback(func):
     global pc_changed_callback
     pc_changed_callback = pc_changed_callback_func_type(func)
     lib.m68k_set_pc_changed_callback(pc_changed_callback)
 
-tas_instr_callback_func_type = CFUNCTYPE(c_int)
 
 def set_tas_instr_callback(func):
     global tas_instr_callback
     tas_instr_callback = tas_instr_callback_func_type(func)
     lib.m68k_set_tas_instr_callback(tas_instr_callback)
 
-illg_instr_callback_func_type = CFUNCTYPE(c_int, c_int)
 
 def set_illg_instr_callback(func):
     global illg_instr_callback
     illg_instr_callback = illg_instr_callback_func_type(func)
     lib.m68k_set_illg_instr_callback(illg_instr_callback)
 
-fc_callback_func_type = CFUNCTYPE(None, c_uint)
 
 def set_fc_callback(func):
     global fc_callback
     fc_callback = fc_callback_func_type(func)
     lib.m68k_set_fc_callback(fc_callback)
 
-instr_hook_callback_func_TYPE = CFUNCTYPE(None, c_uint)
 
 def set_instr_hook_callback(func):
     global instr_hook_callback
     instr_hook_callback = instr_hook_callback_func_type(func)
     lib.m68k_set_instr_hook_callback(instr_hook_callback)
 
+
+lib.m68k_get_virq.restype = c_uint
+lib.m68k_get_reg.restype = c_uint
+lib.m68k_is_valid_instruction.restype = c_uint
+lib.m68k_disassemble.restype = c_uint
+__dis_buf = create_string_buffer(100)
+
+
 def set_cpu_type(cpu_type):
     lib.m68k_set_cpu_type(c_uint(cpu_type))
+
 
 def cpu_init():
     lib.m68k_init()
 
+
 def pulse_reset():
     lib.m68k_pulse_reset()
+
 
 def execute(cycles):
     return lib.m68k_execute(c_int(cycles))
 
+
 def cycles_run():
     return lib.m68k_cycles_run()
+
 
 def cycles_remaining():
     return lib.m68k_cycles_remaining_func()
 
+
 def modify_timeslice(cycles):
     lib.m68k_modify_timeslice(c_int(cycles))
+
 
 def end_timeslice():
     lib.m68k_end_timeslice()
 
+
 def set_irq(level):
     lib.m68k_set_irq(c_uint(level))
+
 
 def set_virq(level, active):
     lib.m68k_set_virq(c_uint(level), c_uint(active))
 
-lib.m68k_get_virq.restype = c_uint
+
 def get_virq(level):
     lib.m68k_get_virq(c_uint(level))
+
 
 def pulse_halt():
     lib.m68k_pulse_halt()
 
+
 def pulse_bus_error():
     lib.m68k_pulse_bus_error()
+
 
 """
 /* Get the size of the cpu context in bytes */
@@ -207,25 +231,26 @@ void m68k_set_context(void* dst);
 void m68k_state_register(const char *type, int index);
 """
 
-lib.m68k_get_reg.restype = c_uint
+
 def get_reg(reg):
     return lib.m68k_get_reg(None, c_int(reg))
+
 
 def set_reg(reg, value):
     lib.m68k_set_reg(c_int(reg), c_uint(value))
 
-lib.m68k_is_valid_instruction.restype = c_uint
+
 def is_valid_instruction(instr, cpu_type):
     return lib.m68k_is_valid_instruction(c_uint(instr), 
                                          c_uint(cpu_type))
 
-lib.m68k_disassemble.restype = c_uint
-__dis_buf = create_string_buffer(100)
+
 def disassemble(pc, cpu_type):
     n = lib.m68k_disassemble(c_char_p(__dis_buf),
                              c_uint(pc),
                              c_uint(cpu_type))
     return __dis_buf.value.decode('ascii')
+
 
 """
 unsigned int m68k_disassemble_raw(char* str_buff, unsigned int pc, const unsigned char* opdata, const unsigned char* argdata, unsigned int cpu_type);
@@ -234,45 +259,52 @@ unsigned int m68k_disassemble_raw(char* str_buff, unsigned int pc, const unsigne
 # Memory API
 
 lib.mem_add_memory.restype = c_bool
+lib.mem_add_device.restype = c_bool
+lib.mem_read_memory.restype = c_uint
+device_handler_func_type = CFUNCTYPE(c_uint, c_int, c_uint, c_uint, c_ubyte, c_uint)
+trace_handler_func_type = CFUNCTYPE(None, c_int, c_uint, c_ubyte, c_uint)
+
+
 def mem_add_memory(base, size, writable=True, with_bytes=None):
     return lib.mem_add_memory(c_uint(base),
                               c_uint(size),
                               c_bool(writable),
                               c_char_p(with_bytes))
 
-lib.mem_add_device.restype = c_bool
+
 def mem_add_device(base, size, handle):
     return lib.mem_add_device(c_uint(base),
                               c_uint(size),
                               c_uint(handle))
 
-device_handler_func_type = CFUNCTYPE(c_uint, c_int, c_uint, c_uint, c_ubyte, c_uint)
 
 def mem_set_device_handler(func):
     global device_handler
     device_handler = device_handler_func_type(func)
     lib.mem_set_device_handler(device_handler)
 
-trace_handler_func_type = CFUNCTYPE(None, c_int, c_uint, c_ubyte, c_uint)
 
 def mem_set_trace_handler(func):
     global trace_handler
     trace_handler = trace_handler_func_type(func)
     lib.mem_set_trace_handler(trace_handler)
 
+
 def mem_enable_tracing(enable=True):
     lib.mem_enable_tracing(c_bool(enable))
+
 
 def mem_enable_bus_error(enable=True):
     lib.mem_enable_bus_error(c_bool(enable))
 
-lib.mem_read_memory.restype = c_uint
+
 def mem_read_memory(address, width):
     return lib.mem_read_memory(c_uint(address), c_ubyte(width))
+
 
 def mem_write_memory(address, width, value):
     lib.mem_write_memory(c_uint(address), c_ubyte(width), c_uint(value))
 
+
 def mem_write_bulk(address, bytes):
     lib.mem_write_memory(c_uint(address), bytes, c_uint(len_bytes))
-
