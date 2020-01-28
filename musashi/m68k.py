@@ -72,10 +72,6 @@ M68K_IRQ_5 = 5
 M68K_IRQ_6 = 6
 M68K_IRQ_7 = 7
 
-M68K_MODE_READ = ord('R')
-M68K_MODE_WRITE = ord('W')
-M68K_MODE_FETCH = ord('I')
-
 MEM_PAGE_SIZE = 4096
 MEM_PAGE_MASK = MEM_PAGE_SIZE - 1
 MEM_READ = 0
@@ -84,6 +80,10 @@ DEV_READ = 2
 DEV_WRITE = 3
 INVALID_READ = 4
 INVALID_WRITE = 5
+MEM_WIDTH_8 = 0
+MEM_WIDTH_16 = 1
+MEM_WIDTH_32 = 2
+
 
 def find_lib():
     """ locate the Mushashi dylib """
@@ -107,7 +107,7 @@ pc_changed_callback_func_type = CFUNCTYPE(None, c_uint)
 tas_instr_callback_func_type = CFUNCTYPE(c_int)
 illg_instr_callback_func_type = CFUNCTYPE(c_int, c_int)
 fc_callback_func_type = CFUNCTYPE(None, c_uint)
-instr_hook_callback_func_TYPE = CFUNCTYPE(None, c_uint)
+instr_hook_callback_func_type = CFUNCTYPE(None, c_uint)
 
 
 def set_int_ack_callback(func):
@@ -241,7 +241,7 @@ def set_reg(reg, value):
 
 
 def is_valid_instruction(instr, cpu_type):
-    return lib.m68k_is_valid_instruction(c_uint(instr), 
+    return lib.m68k_is_valid_instruction(c_uint(instr),
                                          c_uint(cpu_type))
 
 
@@ -307,4 +307,4 @@ def mem_write_memory(address, width, value):
 
 
 def mem_write_bulk(address, bytes):
-    lib.mem_write_memory(c_uint(address), bytes, c_uint(len_bytes))
+    lib.mem_write_bulk(c_uint(address), bytes, c_uint(len(bytes)))

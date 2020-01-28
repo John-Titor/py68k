@@ -1,4 +1,7 @@
 import sys
+import os
+import socket
+
 from musashi.m68k import (
     # Musashi API
     M68K_REG_SR,
@@ -13,13 +16,16 @@ from musashi.m68k import (
     MEM_PAGE_MASK,
     DEV_READ,
     DEV_WRITE,
+    MEM_WIDTH_8,
+    MEM_WIDTH_16,
+    MEM_WIDTH_32,
 
     mem_add_device,
     mem_set_device_handler,
 )
 
 
-class device(object):
+class Device(object):
     """
     Generic device model.
 
@@ -37,11 +43,13 @@ class device(object):
     _emu = None
     _debug = False
 
-    root_device = None
+    _console_output_handler = None
 
-    WIDTH_8 = 1
-    WIDTH_16 = 2
-    WIDTH_32 = 4
+    RootDevice = None
+
+    WIDTH_8 = MEM_WIDTH_8
+    WIDTH_16 = MEM_WIDTH_16
+    WIDTH_32 = MEM_WIDTH_32
 
     def __init__(self, args, name, address=None, interrupt=None):
         self._name = name
@@ -53,7 +61,7 @@ class device(object):
 
     @classmethod
     def add_arguments(cls, parser):
-        """add argument definitions for args passed to __init__"""
+        """Common arguments applying to all devices"""
         parser.add_argument('--debug-device',
                             type=str,
                             default='',
@@ -69,45 +77,49 @@ class device(object):
         self._register_name_map = {}
         for reg in registers:
             regaddr = self._address + registers[reg]
-            if (regaddr in device._register_to_device):
-                other = device._register_to_device[regaddr]
+            if (regaddr in Device._register_to_device):
+                other = Device._register_to_device[regaddr]
                 if self != other:
-                    raise RuntimeError('register at {} already assigned to {}'.format(regaddr, other._name))
-            device._register_to_device[regaddr] = self
+                    raise RuntimeError(f'register at 0x{regaddr:x} already assigned to {other._name}')
+            Device._register_to_device[regaddr] = self
             self._register_name_map[registers[reg]] = reg
             # round up to next word address
             if registers[reg] >= self._size:
                 self._size = (registers[reg] + MEM_PAGE_MASK) & ~MEM_PAGE_MASK
 
             if self._debug:
-                device._emu.trace('DEVICE', address=regaddr,
-                                  info='add register {}/0x{:x} for {}'.format(reg, registers[reg], self._name))
+                Device._emu.trace('DEVICE', address=regaddr,
+                                  info=f'add register {reg}/0x{registers[reg]:x} for {self._name}')
 
     def trace(self, action, info=''):
         """
         Emit a debug trace message
         """
         if self._debug:
-            device._emu.trace('DEVICE', info='{}: {} {}'.format(
+            Device._emu.trace('DEVICE', info='{}: {} {}'.format(
                 self._name, action, info))
 
     def get_register_name(self, offset):
         if offset in self._register_name_map:
             return self._register_name_map[offset]
         else:
-            return '???@{}'.format(offset)
+            return f'???@0x{offset:x}'
+
+    def console_write(self, output):
+        if Device._console_output_handler is not None:
+            Device._console_output_handler(output)
 
     @property
     def current_time(self):
-        return self.root_device._emu.current_time
+        return self.RootDevice._emu.current_time
 
     @property
     def current_cycle(self):
-        return self.root_device._emu.current_cycle
+        return self.RootDevice._emu.current_cycle
 
     @property
     def cycle_rate(self):
-        return self.root_device._emu.cycle_rate
+        return self.RootDevice._emu.cycle_rate
 
     @property
     def address(self):
@@ -124,7 +136,7 @@ class device(object):
     def read(self, width, offset):
         """
         Called when a CPU read access decodes to one of the registers defined in a call to map_registers.
-        width is one of device.WIDTH_8, device.WIDTH_16 or device.WIDTH_32
+        width is one of Device.WIDTH_8, Device.WIDTH_16 or Device.WIDTH_32
         offset is the register offset from the device base address
         Function should return the read value.
         """
@@ -133,7 +145,7 @@ class device(object):
     def write(self, width, offset, value):
         """
         Called when a CPU write access decodes to one of the registers defined in a call to map_registers.
-        width is one of device.WIDTH_8, device.WIDTH_16 or device.WIDTH_32
+        width is one of Device.WIDTH_8, Device.WIDTH_16 or Device.WIDTH_32
         offset is the register offset from the device base address
         value is the value being written
         """
@@ -167,17 +179,14 @@ class device(object):
         return M68K_IRQ_SPURIOUS
 
 
-class root_device(device):
-
-    _console_output_driver = None
-    _console_input_driver = None
+class RootDevice(Device):
 
     def __init__(self, args, emu):
-        super(root_device, self).__init__(args=args, name='root')
-        device._emu = emu
-        device.root_device = self
+        super(RootDevice, self).__init__(args=args, name='root')
+        Device._emu = emu
+        Device.RootDevice = self
 
-        device._debug = 'device' in args.debug_device
+        Device._debug = 'device' in args.debug_device
 
         self._trace_io = args.trace_io or args.trace_everything
 
@@ -186,9 +195,32 @@ class root_device(device):
 
         emu.add_reset_hook(self.reset)
 
+        self._console_socket = None
+        self._console_in_fd = 0
+        self._console_out_fd = 1
+        if args.console_port is not None:
+            self._console_socket = socket(AF_INET, SOCK_STREAM)
+            try:
+                self._console_socket.connect(('localhost', args.console_port))
+                self._console_in_fd = self._console_socket.fileno()
+                self._console_out_fd = self._console_socket.fileno()
+            except ConnectionRefusedError as e:
+                print(f'\nconsole server not listening, try \'nc -4lk localhost {args.console_port}\'\n')
+                raise
+
+        Device._console_output_handler = self._console_output
+
+    @classmethod
+    def add_arguments(cls, parser):
+        parser.add_argument('--console-port',
+                            type=int,
+                            choices=range(1025, 65535),
+                            metavar='PORT-NUMBER',
+                            help='connects the console to a TCP server listening on localhost:PORT-NUMBER')
+
     def cb_int(self, interrupt):
         try:
-            for dev in device._devices:
+            for dev in Device._devices:
                 vector = dev.get_vector(interrupt)
                 if vector != M68K_IRQ_SPURIOUS:
                     self.trace('{} returns vector 0x{:x}'.format(
@@ -204,38 +236,38 @@ class root_device(device):
         address = handle + offset
         try:
             # look for a device
-            if address not in device._register_to_device:
+            if address not in Device._register_to_device:
                 self.trace('lookup', 'failed to find device to handle access')
-                device._emu.cb_buserror(mode, width, address)
+                Device._emu.cb_buserror(mode, width, address)
                 return 0
 
             # dispatch to device emulator
-            dev = device._register_to_device[address]
+            dev = Device._register_to_device[address]
             offset = address - dev._address
-            if chr(mode) == device.DEV_READ:
+            if operation == DEV_READ:
                 value = dev.read(width, offset)
 
                 if self._trace_io:
                     label = "{}:{}".format(
                         dev._name, dev.get_register_name(offset).split('/')[0])
-                    if width == device.WIDTH_8:
+                    if width == Device.WIDTH_8:
                         str = '{} -> 0x{:02x}'.format(label, value)
-                    elif width == device.WIDTH_16:
+                    elif width == Device.WIDTH_16:
                         str = '{} -> 0x{:04x}'.format(label, value)
                     else:
                         str = '{} -> 0x{:08x}'.format(label, value)
-                    device._emu.trace('DEV_READ', address=address, info=str)
+                    Device._emu.trace('DEV_READ', address=address, info=str)
 
             else:
                 if self._trace_io:
                     label = "{}:{}".format(dev._name, dev.get_register_name(offset).split('/')[-1])
-                    if width == device.WIDTH_8:
+                    if width == Device.WIDTH_8:
                         str = '{} <- 0x{:02x}'.format(label, value)
-                    elif width == device.WIDTH_16:
+                    elif width == Device.WIDTH_16:
                         str = '{} <- 0x{:04x}'.format(label, value)
                     else:
                         str = '{} <- 0x{:08x}'.format(label, value)
-                    device._emu.trace('DEV_WRITE', address=address, info=str)
+                    Device._emu.trace('DEV_WRITE', address=address, info=str)
 
                 dev.write(width, offset, value)
 
@@ -251,11 +283,11 @@ class root_device(device):
         if address is not None:
             if not mem_add_device(address, new_dev.size, new_dev.address):
                 raise RuntimeError(f"could not map device @ 0x{address:x}/{size}")
-        device._devices.append(new_dev)
+        Device._devices.append(new_dev)
 
     def tick(self):
         deadline = 100000
-        for dev in device._devices:
+        for dev in Device._devices:
             ret = dev.tick()
             # let the device request an earlier deadline
             if ret is not None:
@@ -267,12 +299,12 @@ class root_device(device):
         return deadline
 
     def reset(self, emu):
-        for dev in device._devices:
+        for dev in Device._devices:
             dev.reset()
 
     def check_interrupts(self):
         ipl = 0
-        for dev in device._devices:
+        for dev in Device._devices:
             dev_ipl = dev.get_interrupt()
             if dev_ipl > ipl:
                 interruptingDevice = dev
@@ -285,24 +317,18 @@ class root_device(device):
                     interruptingDevice._name, ipl))
         set_irq(ipl)
 
-    def register_console_input_driver(self, inst):
-        root_device._console_input_driver = inst
-
-    def register_console_output_driver(self, inst):
-        root_device._console_output_driver = inst
-
     def console_input(self, input):
-        if root_device._console_input_driver is not None:
-            root_device._console_input_driver.handle_console_input(input)
+        # XXX
+        return None
 
-    def console_output(self, output):
-        if root_device._console_output_driver is not None:
-            root_device._console_output_driver.handle_console_output(output)
+    def _console_output(self, output):
+        if self._console_out_fd is not None:
+            os.write(self._console_out_fd, output)
 
 # XXX these are horribly outdated right now...
 
 
-class uart(device):
+class uart(Device):
     """
     Dumb UART
     """
@@ -353,7 +379,7 @@ class uart(device):
         return M68K_IRQ_SPURIOUS
 
 
-class timer(device):
+class timer(Device):
     """
     A simple down-counting timer
     """
@@ -374,7 +400,7 @@ class timer(device):
             value = self._reload
         if addr == self._registers['COUNT']:
             # force a tick to make sure we have caught up with time
-            self.tick(device._emu.current_time)
+            self.tick(Device._emu.current_time)
             value = self._count
         return value
 
@@ -383,7 +409,7 @@ class timer(device):
             self.trace('set reload', '{}'.format(value))
             self._reload = value
             self._count = self._reload
-            self._last_update = device._emu.current_time
+            self._last_update = Device._emu.current_time
 
     def tick(self):
         # do nothing if we are disabled

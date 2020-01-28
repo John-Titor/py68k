@@ -1,12 +1,13 @@
 import sys
 import curses
 import vt102
-from device import device
+import socket
+from device import Device
 
 
-class Console(device):
+class Console(Device):
 
-    stdscr = None
+    console = None
 
     # VT100 and a smattering of later DEC encodings
     input_keymap = {
@@ -29,11 +30,30 @@ class Console(device):
 
     def __init__(self, args, address, interrupt):
         super(Console, self).__init__(args=args, name='console')
-        device.root_device.register_console_output_driver(self)
+        device.RootDevice.register_console_output_driver(self)
+        Console.console = self
+
+        self._socket = None
+        if args.console_port is not None:
+            self._socket = socket.socket(AF_INET, SOCK_STREAM)
+            try:
+                self._socket.connect(('127.0.0.1', args.console_port))
+            except ConnectionRefusedError as e:
+                print(f'--console-port set but console server not running, try "nc -4kl localhost {args.console_port}"')
+                sys.exit(1)
+
+        curses.setupterm(fd=output_fd)
+
+    @classmethod
+    def init_terminal(cls, win):
+        if Console.console is not None:
+            Console.console._init_terminal(win)
+
+    def _init_terminal(self, win):
         curses.nonl()
         curses.curs_set(1)
 
-        self._win = Console.stdscr
+        self._win = win
         self._win.nodelay(1)
         self._win.scrollok(0)
         self._win.idlok(1)
@@ -45,8 +65,10 @@ class Console(device):
 
     @classmethod
     def add_arguments(cls, parser):
-        """add arguments to be pased as args to __init__"""
-        pass
+        parser.add_argument('--console-port',
+                            type=int,
+                            metavar='PORT-NUMBER',
+                            help='UDP port for console (defaults to stdout)')
 
     def _fmt(self, val):
         str = '0x{:02x} \'{}\''.format(val, curses.keyname(val))
@@ -54,7 +76,7 @@ class Console(device):
 
     def _handle_input(self, input):
         self.trace('in ' + self._fmt(input))
-        device.root_device.console_input(input)
+        device.RootDevice.console_input(input)
 
     def handle_console_output(self, output):
         self.trace('out ' + self._fmt(output))

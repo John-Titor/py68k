@@ -18,7 +18,7 @@ def configure(args):
                             memory_map=mmap,
                             cpu="68070")
 
-    emu.add_device(args, device.root_device, 0xff8000)
+    emu.add_device(args, device.RootDevice, 0xff8000)
     devices.p90ce201.add_devices(args)
 
     emu.add_device(args,

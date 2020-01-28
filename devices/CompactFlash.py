@@ -1,7 +1,7 @@
 import sys
 import io
 import struct
-from device import device
+from device import Device
 
 SECTOR_SIZE = 512
 
@@ -52,7 +52,7 @@ AMODE_IDENTIFY = 'I'
 AMODE_NONE = 'N'
 
 
-class CompactFlash(device):
+class CompactFlash(Device):
     """
     Memory-mapped CompactFlash emulation.
 
@@ -285,7 +285,7 @@ class CompactFlash(device):
             self.trace('IOERR', 'data read when not reading / identifying')
             return 0
 
-        if width == device.WIDTH_8:
+        if width == Device.WIDTH_8:
             count = 1
         else:
             count = 2
@@ -323,7 +323,7 @@ class CompactFlash(device):
 
         data = bytearray()
         data.append(value & 0xff)
-        if width == device.WIDTH_16:
+        if width == Device.WIDTH_16:
             data.append(value >> 8)
 
         if self._bytes_remaining < len(data):

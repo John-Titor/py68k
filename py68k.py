@@ -6,37 +6,23 @@
 import sys
 from pathlib import Path
 import argparse
-import curses
 import importlib
 
-import emulator
-import device
-import deviceConsole
-
-
-def run_emu(stdscr, target, args):
-    # get an emulator
-    emu = target.configure(args)
-
-    # attach the console to the emulator
-    deviceConsole.Console.stdscr = stdscr
-    emu.add_device(args, deviceConsole.Console)
-
-    # run some instructions
-    emu.run()
-    emu.finish()
-    return emu.fatal_info()
+from emulator import Emulator
+from device import Device, RootDevice
 
 
 # Parse commandline arguments
 parser = argparse.ArgumentParser(description='m68k emulator',
                                  add_help=False,
-                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                                 fromfile_prefix_chars='@',
+                                 epilog='Read options from a file: @CONFIG-FILENAME')
 parser.add_argument('--help',
                     action='store_true',
                     help='print this help')
 
-actiongroup = parser.add_mutually_exclusive_group(required=True)
+actiongroup = parser.add_mutually_exclusive_group()
 actiongroup.add_argument('--target',
                          type=str,
                          default='none',
@@ -57,9 +43,9 @@ if args.list_targets:
 if args.target is not None:
     try:
         target = importlib.import_module("targets." + args.target)
-        emulator.Emulator.add_arguments(parser)
-        deviceConsole.Console.add_arguments(parser)
-        device.device.add_arguments(parser)
+        Emulator.add_arguments(parser)
+        Device.add_arguments(parser)
+        RootDevice.add_arguments(parser)
         target.add_arguments(parser)
 
     except ModuleNotFoundError as e:
@@ -73,6 +59,11 @@ if args.help is True:
     parser.print_help()
     sys.exit(0)
 
+# configure the emulator
 args = parser.parse_args()
+emu = target.configure(args)
 
-print(curses.wrapper(run_emu, target, args))
+# run some instructions
+emu.run()
+emu.finish()
+print(emu.fatal_info())

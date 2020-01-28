@@ -1,5 +1,5 @@
 import sys
-from device import device
+from device import Device, RootDevice
 from collections import deque
 
 
@@ -39,9 +39,10 @@ class Channel():
     INT_TXRDY = 0x01
     INT_RXRDY_FFULL = 0x02
 
-    def __init__(self, parent):
+    def __init__(self, parent, is_console=False):
         self.reset()
         self._parent = parent
+        self._is_console = is_console
 
     def reset(self):
         self._mr1 = 0
@@ -107,8 +108,8 @@ class Channel():
                 self._txEnable = False
                 # self._txfifo
 
-        elif addr == Channel.REG_TB:
-            device.root_device.console_output(value)
+        elif addr == Channel.REG_TB and self._is_console:
+            self._parent.console_write(chr(value).encode('ascii'))
 
         self.update_status()
 
@@ -263,7 +264,7 @@ class Counter():
         return (self._parent.cycle_rate / 3.6) * self._prescale
 
 
-class MC68681(device):
+class MC68681(Device):
     """
     Emulation of the MC68681 DUART / timer device.
     """
@@ -316,17 +317,19 @@ class MC68681(device):
                                       interrupt=interrupt)
         self.map_registers(MC68681._registers)
 
-        self._a = Channel(self)
-        self._b = Channel(self)
+        self._a = Channel(self, args.duart_console_port == 'A')
+        self._b = Channel(self, args.duart_console_port == 'B')
         self._counter = Counter(self)
         self.reset()
         self.trace('init done')
 
-        device.root_device.register_console_input_driver(self._a)
-
     @classmethod
-    def add_arguments(cls, parser):
-        """add argument definitions for args passed to __init__"""
+    def add_arguments(cls, parser, default_console_port='A'):
+        parser.add_argument('--duart-console-port',
+                            type=str,
+                            choices=['A', 'B', 'none'],
+                            default=default_console_port,
+                            help='MC68681 DUART port to treat as console')
         return
 
     def read(self, width, offset):

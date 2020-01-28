@@ -6,11 +6,18 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "m68k.h"
 #include "memory.h"
 
 // Internal
+
+#if 0
+# define debug(fmt, ...)    fprintf(stderr, "mem: " fmt "\n" , __VA_ARGS__)
+#else
+# define debug(fmt, ...)    do {} while(0)
+#endif
 
 #define MEM_PAGE_SIZE   (1U<<12)
 #define MEM_SIZE        (1ULL<<32)
@@ -50,7 +57,7 @@ static mem_trace_handler_t  mem_trace_handler;
 
 
 static void
-mem_trace(mem_operation_t operation, uint32_t address, uint8_t width, uint32_t value)
+mem_trace(mem_operation_t operation, uint32_t address, mem_width_t width, uint32_t value)
 {
     if (mem_trace_enabled
         && mem_trace_handler) {
@@ -59,7 +66,7 @@ mem_trace(mem_operation_t operation, uint32_t address, uint8_t width, uint32_t v
 }
 
 static uint32_t
-mem_read(uint32_t address, uint8_t width)
+mem_read(uint32_t address, mem_width_t width)
 {
     pte_t   pte = mem_pagetable[address / MEM_PAGE_SIZE];
 
@@ -69,7 +76,7 @@ mem_read(uint32_t address, uint8_t width)
             if (dp->size) {
                 uint32_t offset = address - dp->base;
                 uint32_t ret = mem_dev_handler(DEV_READ, dp->handle, offset, width, 0);
-                mem_trace(DEV_READ, address, width, ret);
+//                mem_trace(DEV_READ, address, width, ret);
                 return ret;
             }
         } else {
@@ -80,14 +87,14 @@ mem_read(uint32_t address, uint8_t width)
                     uint8_t *dp = bp->buf + offset;
                     uint32_t ret = 0;
                     switch (width) {
-                    case 4:
+                    case MEM_WIDTH_32:
                         ret = *dp++;
                         ret = (ret << 8) + *dp++;
                         // FALLTHROUGH
-                    case 2:
+                    case MEM_WIDTH_16:
                         ret = (ret << 8) + *dp++;
                         // FALLTHROUGH
-                    case 1:
+                    case MEM_WIDTH_8:
                         ret = (ret << 8) + *dp;
                         mem_trace(MEM_READ, address, width, ret);
                         return ret;
@@ -105,7 +112,7 @@ mem_read(uint32_t address, uint8_t width)
 }
 
 static void
-mem_write(uint32_t address, uint8_t width, uint32_t value)
+mem_write(uint32_t address, mem_width_t width, uint32_t value)
 {
     pte_t   pte = mem_pagetable[address / MEM_PAGE_SIZE];
 
@@ -114,7 +121,7 @@ mem_write(uint32_t address, uint8_t width, uint32_t value)
             mem_device_t *dp = mem_devices + pte.id;
             if (dp->size) {
                 uint32_t offset = address - dp->base;
-                mem_trace(DEV_WRITE, offset, width, value);
+//                mem_trace(DEV_WRITE, offset, width, value);
                 mem_dev_handler(DEV_WRITE, dp->handle, offset, width, value);
                 return;
             }
@@ -126,14 +133,14 @@ mem_write(uint32_t address, uint8_t width, uint32_t value)
                     uint8_t *dp = bp->buf + offset;
                     mem_trace(MEM_WRITE, address, width, value);
                     switch (width) {
-                    case 4:
+                    case MEM_WIDTH_32:
                         *dp++ = (value >> 24) & 0xff;
                         *dp++ = (value >> 16) & 0xff;
                         // FALLTHROUGH
-                    case 2:
+                    case MEM_WIDTH_16:
                         *dp++ = (value >> 8) & 0xff;
                         // FALLTHROUGH
-                    case 1:
+                    case MEM_WIDTH_8:
                         *dp = value & 0xff;
                         return;
                     }
@@ -285,7 +292,7 @@ mem_enable_bus_error(bool enable)
 }
 
 uint32_t
-mem_read_memory(uint32_t address, uint8_t width)
+mem_read_memory(uint32_t address, mem_width_t width)
 {
     pte_t   pte = mem_pagetable[address / MEM_PAGE_SIZE];
 
@@ -298,14 +305,14 @@ mem_read_memory(uint32_t address, uint8_t width)
                 uint8_t *dp = bp->buf + offset;
                 uint32_t ret = 0;
                 switch (width) {
-                case 4:
+                case MEM_WIDTH_32:
                     ret = *dp++;
                     ret = (ret << 8) + *dp++;
                     // FALLTHROUGH
-                case 2:
+                case MEM_WIDTH_16:
                     ret = (ret << 8) + *dp++;
                     // FALLTHROUGH
-                case 1:
+                case MEM_WIDTH_8:
                     ret = (ret << 8) + *dp;
                     return ret;
                 }
@@ -316,7 +323,7 @@ mem_read_memory(uint32_t address, uint8_t width)
 }
 
 void
-mem_write_memory(uint32_t address, uint8_t width, uint32_t value)
+mem_write_memory(uint32_t address, mem_width_t width, uint32_t value)
 {
     pte_t   pte = mem_pagetable[address / MEM_PAGE_SIZE];
 
@@ -328,28 +335,30 @@ mem_write_memory(uint32_t address, uint8_t width, uint32_t value)
             if ((offset + width) <= bp->size) {
                 uint8_t *dp = bp->buf + offset;
                 switch (width) {
-                case 4:
+                case MEM_WIDTH_32:
                     *dp++ = (value >> 24) & 0xff;
                     *dp++ = (value >> 16) & 0xff;
                     // FALLTHROUGH
-                case 2:
+                case MEM_WIDTH_16:
                     *dp++ = (value >> 8) & 0xff;
                     // FALLTHROUGH
-                case 1:
+                case MEM_WIDTH_8:
                     *dp = value & 0xff;
                     return;
                 }
             }
         }
     }
+    debug("ignored write @ 0x%x, width %d value 0x%x", address, width, value);
 }
 
 void
 mem_write_bulk(uint32_t address, uint8_t *buffer, uint32_t size)
 {
     // could make this faster...
+    debug("bulk write 0x%x, from %p size %u", address, buffer, size);
     while (size--) {
-        mem_write_memory(address++, 1, *buffer++);
+        mem_write_memory(address++, MEM_WIDTH_8, *buffer++);
     }
 }
 
@@ -358,70 +367,47 @@ mem_write_bulk(uint32_t address, uint8_t *buffer, uint32_t size)
 unsigned int
 m68k_read_memory_8(unsigned int address)
 {
-    return mem_read(address, 1);
+    return mem_read(address, MEM_WIDTH_8);
 }
 
 unsigned int
 m68k_read_memory_16(unsigned int address)
 {
-    return mem_read(address, 2);
+    return mem_read(address, MEM_WIDTH_16);
 }
 
 unsigned int
 m68k_read_memory_32(unsigned int address)
 {
-    return mem_read(address, 4);
+    return mem_read(address, MEM_WIDTH_32);
 }
 
 void
 m68k_write_memory_8(unsigned int address, unsigned int value)
 {
-    return mem_write(address, 1, value);
+    return mem_write(address, MEM_WIDTH_8, value);
 }
 
 void
 m68k_write_memory_16(unsigned int address, unsigned int value)
 {
-    return mem_write(address, 2, value);
+    return mem_write(address, MEM_WIDTH_16, value);
 }
 
 void
 m68k_write_memory_32(unsigned int address, unsigned int value)
 {
-    return mem_write(address, 4, value);
+    return mem_write(address, MEM_WIDTH_32, value);
 }
 
 unsigned int
 m68k_read_disassembler_16 (unsigned int address)
 {
-    pte_t           pte = mem_pagetable[address / MEM_PAGE_SIZE];
-    mem_buffer_t    *bp = mem_buffers + pte.id;
-    uint32_t        offset = address - bp->base;
-
-    if (pte.valid
-        && !pte.device
-        && bp->buf
-        && ((offset + 2) <= bp->size)) {
-
-        return (bp->buf[offset] << 8) 
-            + bp->buf[offset + 1];
-    }
-    return 0xffff;
+    return mem_read_memory(address, MEM_WIDTH_16);
 }
 
 unsigned int
 m68k_read_disassembler_32 (unsigned int address)
 {
-    pte_t           pte = mem_pagetable[address / MEM_PAGE_SIZE];
-    mem_buffer_t    *bp = mem_buffers + pte.id;
-    uint32_t        offset = address - bp->base;
-
-    if (pte.valid
-        && !pte.device
-        && bp->buf
-        && ((offset + 4) <= bp->size)) {
-
-        return (bp->buf[offset] << 8) + bp->buf[offset + 1];
-    }
-    return 0xffff;
+    return mem_read_memory(address, MEM_WIDTH_32);
 }
