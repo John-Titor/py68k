@@ -4,11 +4,11 @@ import curses
 import vt102
 import socket
 import selectors
+import signal
+import time
 
 
 class Console():
-
-    console = None
 
     # VT100 and a smattering of later DEC encodings
     input_keymap = {
@@ -29,13 +29,19 @@ class Console():
         curses.KEY_END: '\x1b4'
     }
 
+    banner = '\n Waiting for emulator, hit ^C three times quickly to exit.\n'
+
     def __init__(self):
         self._selector = selectors.DefaultSelector()
         self._buffered_output = u''
         self._buffered_input = u''
         self._connection = None
+        self._first_interrupt_time = 0.0
+        self._interrupt_count = 0
+        self._want_exit = False
 
     def run(self):
+        signal.signal(signal.SIGINT, self._keyboard_interrupt)
         curses.wrapper(self._run)
 
     def _run(self, win):
@@ -52,17 +58,19 @@ class Console():
         self._vt_screen.attach(self._vt_stream)
         self._buffered_output = u''
 
+        self._vt_stream.process(Console.banner)
+
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server_socket.bind(('127.0.0.1', 6809))
         server_socket.listen()
         server_socket.setblocking(False)
-        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._selector.register(server_socket, selectors.EVENT_READ, self._accept)
-
-        # XXX keyboard interrupt?
 
         while True:
             events = self._selector.select(timeout=0.1)
+            if self._want_exit:
+                return
             for key, mask in events:
                 callback = key.data
                 callback(key.fileobj, mask)
@@ -87,6 +95,7 @@ class Console():
             self._selector.unregister(self._connection)
             self._connection.close()
             self._connection = None
+            self._vt_stream.process(Console.banner)
 
     def _fmt(self, val):
         str = f'{val:#02x} \'{curses.keyname(val)}\''
@@ -129,3 +138,15 @@ class Console():
                     self._handle_input(ord(c))
             else:
                 self._handle_input(input)
+
+    def _keyboard_interrupt(self, signal=None, frame=None):
+        now = time.time()
+        interval = now - self._first_interrupt_time
+
+        if interval >= 1.0:
+            self._first_interrupt_time = now
+            self._interrupt_count = 1
+        else:
+            self._interrupt_count += 1
+            if self._interrupt_count >= 3:
+                self._want_exit = True

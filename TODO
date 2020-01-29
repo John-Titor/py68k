@@ -60,11 +60,13 @@ EmuTOS:
   ☐ Illegal instruction callbacks for Native Feature interfaces
 
 Console:
-  ☐ emulator socket connection
+  ✔ emulator socket connection @done (20-01-28 20:52)
     ✔ send output @done (20-01-28 15:44)
     ✔ collect input @done (20-01-28 17:45)
-  ☐ "waiting for connection, hit ^C to exit" message
+  ✔ "waiting for connection, hit ^C to exit" message @done (20-01-28 20:52)
+  ✔ don't die on ^C in console server @done (20-01-28 20:52)
   ☐ wrapping protocol for additional widgets?
+    ☐ consider urwid, curtsies, npyscreen as widget toolkits for this
 
 Documentation:
   ☐ update README.md

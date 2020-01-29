@@ -353,6 +353,8 @@ class SocketConsole(Device):
 
     def _recv(self, conn, mask):
         input = conn.recv(10)
+        if len(input) == 0:
+            self._emu.fatal('console server disconnected')
         Device.console_handle_input(input)
 
 
