@@ -1,7 +1,4 @@
-from pathlib import Path
-
 from emulator import Emulator, M68K_IRQ_2
-from device import RootDevice
 from devices.CompactFlash import CompactFlash
 from devices.MC68681 import MC68681
 from musashi.m68k import mem_write_bulk

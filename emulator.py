@@ -117,7 +117,7 @@ class Emulator(object):
         self._postmortem = None
         self._first_interrupt_time = 0.0
         self._interrupt_count = 0
-        self._RootDevice = None
+        self._root_device = None
 
         # initialise tracing
         self._trace_file = open(args.trace_file, "w", 1)
@@ -299,6 +299,7 @@ class Emulator(object):
 
     def run(self):
         signal.signal(signal.SIGINT, self._keyboard_interrupt)
+        print('\nHit ^C three times quickly to exit\n')
 
         # reset everything
         self.cb_reset()
@@ -308,7 +309,7 @@ class Emulator(object):
 
         self._start_time = time.time()
         while not self._dead:
-            cycles_to_run = self._RootDevice.tick()
+            cycles_to_run = self._root_device.tick()
             if (cycles_to_run == 0) or (cycles_to_run > self._quantum):
                 cycles_to_run = self._quantum
             self._elapsed_cycles += execute(cycles_to_run)
@@ -338,13 +339,14 @@ class Emulator(object):
         """
         Attach a device to the emulator at the given offset in device space
         """
-        if self._RootDevice is None:
-            self._RootDevice = dev(args=args, emu=self)
+        if self._root_device is None:
+            self._root_device = dev(args=args, emu=self)
+            self._root_device.add_system_devices(args)
         else:
-            self._RootDevice.add_device(args=args,
-                                        dev=dev,
-                                        address=address,
-                                        interrupt=interrupt)
+            self._root_device.add_device(args=args,
+                                         dev=dev,
+                                         address=address,
+                                         interrupt=interrupt)
 
     def add_reset_hook(self, hook):
         """
@@ -563,8 +565,6 @@ class Emulator(object):
             self._interrupt_count += 1
             if self._interrupt_count >= 3:
                 self.fatal('Exit due to user interrupt.')
-
-        self._RootDevice.console_input(3)
 
     def fatal_exception(self, exception_info):
         """

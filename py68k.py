@@ -4,12 +4,13 @@
 #
 
 import sys
-from pathlib import Path
 import argparse
 import importlib
+from pathlib import Path
 
 from emulator import Emulator
 from device import Device, RootDevice
+from console import Console
 
 
 # Parse commandline arguments
@@ -31,29 +32,28 @@ actiongroup.add_argument('--target',
 actiongroup.add_argument('--list-targets',
                          action='store_true',
                          help='list available targets')
+actiongroup.add_argument('--console-server',
+                         action='store_true',
+                         help='run the interactive console server')
 
 (args, _) = parser.parse_known_args()
 
 if args.list_targets:
-    p = Path("targets")
-    for module in p.glob("*.py"):
-        print(f"    {module.stem}")
+    p = Path('targets')
+    for module in p.glob('*.py'):
+        print(f'    {module.stem}')
+    sys.exit(0)
+
+if args.console_server:
+    Console().run()
     sys.exit(0)
 
 if args.target is not None:
-    try:
-        target = importlib.import_module("targets." + args.target)
-        Emulator.add_arguments(parser)
-        Device.add_arguments(parser)
-        RootDevice.add_arguments(parser)
-        target.add_arguments(parser)
-
-    except ModuleNotFoundError as e:
-        print(f"unsupported target: {args.target}, try --list-targets")
-        sys.exit(1)
-
-    except Exception:
-        raise
+    target = importlib.import_module('targets.' + args.target)
+    Emulator.add_arguments(parser)
+    Device.add_arguments(parser)
+    RootDevice.add_arguments(parser)
+    target.add_arguments(parser)
 
 if args.help is True:
     parser.print_help()

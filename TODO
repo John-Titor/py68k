@@ -1,28 +1,14 @@
 Things to investigate / fix:
   ✔ fix disassembly printing as bytes object (b'...') @done (20-01-11 09:14)
   ☐ tabs don't print correctly
-  ☐ add reset hook & pass reset to peripherals
-  ☐ look at pyglet to handle console
-
-CF/ATA emulation:
-  ☐ reset behaviour
-    Can't be done for Tiny68k as /CS1 is permanently high
-  ✔ IDENTIFY DEVICE @done (20-01-11 09:14)
-  ✔ option to set disk file @done (20-01-25 21:40)
-
-Tiny68k:
-  ☐ I2C realtime clock device
-  ☐ I2C EEPROM emulation
-  ✔ --rom commandline argument, loads ROM -> RAM at startup @done (20-01-25 21:37)
-  ✔ emulator.add_reset_hook -> call at reset @done (20-01-25 22:34)
-  ✔ emulator.add_memory @done (20-01-25 22:52)
-  ☐ emulator support ELF both to load and just for symbols
+  ✔ add reset hook & pass reset to peripherals @done (20-01-28 15:54)
+  ✘ look at pyglet to handle console @cancelled (20-01-28 15:55)
   ☐ emulator.cb_buserror <- do something useful here
-  ☐ device registration base/length -> mem_add_device
-  ☐ use mapping handle to find devices faster? (limitation of 1 device per page regardless...)
-
-P90MB:
-  ☐ need new memory model, support multiple disjoint memories (RAM, ROM), > 16MiB
+  ☐ use device mapping handle to find devices faster? (limitation of 1 device per page regardless...)
+  ☐ fix console in/output paths to be bytes all the way through
+  
+Features:
+  ✔ need new memory model, support multiple disjoint memories (RAM, ROM), > 16MiB @done (20-01-28 15:54)
     ✔ implement m68k_read/write_memory_8/16/32(), m68k_read_disassembler_16/32 @done (20-01-24 21:51)
     ✔ add_memory_range(base, size, writable, with_contents(optional)) @done (20-01-24 22:38)
     ✔ add_device_range(base, size, ID) @done (20-01-24 22:38)
@@ -31,7 +17,39 @@ P90MB:
     ✔ table entry: valid bit, writable bit, handler ID @done (20-01-24 21:51)
     ✔ handlers for memory, device @done (20-01-24 21:51)
     ✔ emulator access to memory @done (20-01-25 23:24)
+  ☐ multiple ELF files for symbol lookup
+  ☐ load ELF file to RAM & go
+  ☐ inject arbitrary RAM contents
+
+Devices:
+  I2C:
+    ☐ generic I2C 'bus'
+    ☐ DS1232 RTC
+    ☐ display?
+  CF/ATA:
+    ☐ reset behaviour
+      Can't be done for Tiny68k as /CS1 is permanently high
+    ✔ IDENTIFY DEVICE @done (20-01-11 09:14)
+    ✔ option to set disk file @done (20-01-25 21:40)
+
+Tiny68k:
+  ☐ I2C realtime clock device 
+  ☐ I2C EEPROM emulation
+  ✔ --rom commandline argument, loads ROM -> RAM at startup @done (20-01-25 21:37)
+  ✔ emulator.add_reset_hook -> call at reset @done (20-01-25 22:34)
+  ✔ emulator.add_memory @done (20-01-25 22:52)
+  ✔ --eeprom commandline argument, supplies EEPROM contents @done (20-01-28 15:54)
+    ✔ if empty, don't copy ROM -> RAM @done (20-01-28 16:00)
+  ✔ device registration base/length -> mem_add_device @done (20-01-28 15:54)
+  
+P90MB:
   ☐ device models
+    ☐ UARTs
+    ☐ CompactFlash
+    ☐ Timers
+    ☐ flash write interface
+    ☐ I2C
+    ☐ RC2014 boards?
   ☐ --rom commandline argument, places code in ROM
 
 Simple:
@@ -40,6 +58,13 @@ Simple:
   
 EmuTOS:
   ☐ Illegal instruction callbacks for Native Feature interfaces
+
+Console:
+  ☐ emulator socket connection
+    ✔ send output @done (20-01-28 15:44)
+    ✔ collect input @done (20-01-28 17:45)
+  ☐ "waiting for connection, hit ^C to exit" message
+  ☐ wrapping protocol for additional widgets?
 
 Documentation:
   ☐ update README.md

@@ -1,6 +1,7 @@
 import sys
 import os
 import socket
+import selectors
 
 from musashi.m68k import (
     # Musashi API
@@ -43,9 +44,10 @@ class Device(object):
     _emu = None
     _debug = False
 
-    _console_output_handler = None
+    _root_device = None
 
-    RootDevice = None
+    _console_output_handler = None
+    _console_input_handler = None
 
     WIDTH_8 = MEM_WIDTH_8
     WIDTH_16 = MEM_WIDTH_16
@@ -105,21 +107,35 @@ class Device(object):
         else:
             return f'???@0x{offset:x}'
 
-    def console_write(self, output):
+    @classmethod
+    def register_console_output_handler(cls, handler):
+        Device._console_output_handler = handler
+
+    @classmethod
+    def register_console_input_handler(cls, handler):
+        Device._console_input_handler = handler
+
+    @classmethod
+    def console_handle_output(cls, output):
         if Device._console_output_handler is not None:
             Device._console_output_handler(output)
 
+    @classmethod
+    def console_handle_input(cls, input):
+        if Device._console_input_handler is not None:
+            Device._console_input_handler(input)
+
     @property
     def current_time(self):
-        return self.RootDevice._emu.current_time
+        return self._root_device._emu.current_time
 
     @property
     def current_cycle(self):
-        return self.RootDevice._emu.current_cycle
+        return self._root_device._emu.current_cycle
 
     @property
     def cycle_rate(self):
-        return self.RootDevice._emu.cycle_rate
+        return self._root_device._emu.cycle_rate
 
     @property
     def address(self):
@@ -170,7 +186,7 @@ class Device(object):
         """
         return 0
 
-    def get_vector(self):
+    def get_vector(self, interrupt):
         """
         Called during the interrupt acknowledge phase. Should return a programmed vector or
         M68K_IRQ_AUTOVECTOR as appropriate if the device is interrupting, or M68K_IRQ_SPURIOUS
@@ -184,7 +200,7 @@ class RootDevice(Device):
     def __init__(self, args, emu):
         super(RootDevice, self).__init__(args=args, name='root')
         Device._emu = emu
-        Device.RootDevice = self
+        Device._root_device = self
 
         Device._debug = 'device' in args.debug_device
 
@@ -195,28 +211,21 @@ class RootDevice(Device):
 
         emu.add_reset_hook(self.reset)
 
-        self._console_socket = None
-        self._console_in_fd = 0
-        self._console_out_fd = 1
-        if args.console_port is not None:
-            self._console_socket = socket(AF_INET, SOCK_STREAM)
-            try:
-                self._console_socket.connect(('localhost', args.console_port))
-                self._console_in_fd = self._console_socket.fileno()
-                self._console_out_fd = self._console_socket.fileno()
-            except ConnectionRefusedError as e:
-                print(f'\nconsole server not listening, try \'nc -4lk localhost {args.console_port}\'\n')
-                raise
-
-        Device._console_output_handler = self._console_output
+    def add_system_devices(self, args):
+        if args.stdout_console:
+            Device._emu.add_device(args, StdoutConsole)
+        else:
+            Device._emu.add_device(args, SocketConsole)
 
     @classmethod
     def add_arguments(cls, parser):
-        parser.add_argument('--console-port',
-                            type=int,
-                            choices=range(1025, 65535),
-                            metavar='PORT-NUMBER',
-                            help='connects the console to a TCP server listening on localhost:PORT-NUMBER')
+        parser.add_argument('--stdout-console',
+                            action='store_true',
+                            default=False,
+                            help='sends console output to stdout instead of connecting '
+                            'to the console server. Disconnects console input.')
+        # StdoutConsole.add_arguments(parser)
+        # SocketConsole.add_arguments(parser)
 
     def cb_int(self, interrupt):
         try:
@@ -236,37 +245,36 @@ class RootDevice(Device):
         address = handle + offset
         try:
             # look for a device
-            if address not in Device._register_to_device:
-                self.trace('lookup', 'failed to find device to handle access')
-                Device._emu.cb_buserror(mode, width, address)
+            try:
+                dev = Device._register_to_device[address]
+            except KeyError:
+                self.trace('lookup', f'failed to find device to handle access @{address:#x}')
                 return 0
 
             # dispatch to device emulator
-            dev = Device._register_to_device[address]
             offset = address - dev._address
             if operation == DEV_READ:
                 value = dev.read(width, offset)
 
                 if self._trace_io:
-                    label = "{}:{}".format(
-                        dev._name, dev.get_register_name(offset).split('/')[0])
+                    label = f'{dev._name}:{dev.get_register_name(offset).split("/")[0]}'
                     if width == Device.WIDTH_8:
-                        str = '{} -> 0x{:02x}'.format(label, value)
+                        str = f'{label} -> {value:#02x}'
                     elif width == Device.WIDTH_16:
-                        str = '{} -> 0x{:04x}'.format(label, value)
+                        str = f'{label} -> {value:#04x}'
                     else:
-                        str = '{} -> 0x{:08x}'.format(label, value)
+                        str = f'{label} -> {value:#08x}'
                     Device._emu.trace('DEV_READ', address=address, info=str)
 
             else:
                 if self._trace_io:
-                    label = "{}:{}".format(dev._name, dev.get_register_name(offset).split('/')[-1])
+                    label = f'{dev._name}:{dev.get_register_name(offset).split("/")[-1]}'
                     if width == Device.WIDTH_8:
-                        str = '{} <- 0x{:02x}'.format(label, value)
+                        str = f'{label} <- {value:#02x}'
                     elif width == Device.WIDTH_16:
-                        str = '{} <- 0x{:04x}'.format(label, value)
+                        str = f'{label} <- {value:#04x}'
                     else:
-                        str = '{} <- 0x{:08x}'.format(label, value)
+                        str = f'{label} <- {value:#08x}'
                     Device._emu.trace('DEV_WRITE', address=address, info=str)
 
                 dev.write(width, offset, value)
@@ -317,13 +325,46 @@ class RootDevice(Device):
                     interruptingDevice._name, ipl))
         set_irq(ipl)
 
-    def console_input(self, input):
-        # XXX
-        return None
 
-    def _console_output(self, output):
-        if self._console_out_fd is not None:
-            os.write(self._console_out_fd, output)
+class SocketConsole(Device):
+    def __init__(self, args, address, interrupt):
+        super(SocketConsole, self).__init__(args=args, name='console')
+
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            self._socket.connect(('localhost', 6809))
+            self._selector = selectors.DefaultSelector()
+            self._selector.register(self._socket,
+                                    selectors.EVENT_READ,
+                                    self._recv)
+        except ConnectionRefusedError as e:
+            self._emu.fatal('console server not listening, run \'py68k.py --console-server\' in another window.')
+
+        Device.register_console_output_handler(self._send)
+
+    def _send(self, output):
+        self._socket.send(output)
+
+    def tick(self):
+        events = self._selector.select(timeout=0)
+        for key, mask in events:
+            callback = key.data
+            callback(key.fileobj, mask)
+
+    def _recv(self, conn, mask):
+        input = conn.recv(10)
+        Device.console_handle_input(input)
+
+
+class StdoutConsole(Device):
+    def __init__(self, args, address, interrupt):
+        super(StdoutConsole, self).__init__(args=args, name='console')
+        Device.register_console_output_handler(self._send)
+
+    def _send(self, output):
+        sys.stdout.write(output.decode('ascii'))
+        sys.stdout.flush()
+
 
 # XXX these are horribly outdated right now...
 

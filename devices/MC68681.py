@@ -43,6 +43,8 @@ class Channel():
         self.reset()
         self._parent = parent
         self._is_console = is_console
+        if self._is_console:
+            self._parent.register_console_input_handler(self._handle_console_input)
 
     def reset(self):
         self._mr1 = 0
@@ -109,7 +111,7 @@ class Channel():
                 # self._txfifo
 
         elif addr == Channel.REG_TB and self._is_console:
-            self._parent.console_write(chr(value).encode('ascii'))
+            self._parent.console_handle_output(chr(value).encode('ascii'))
 
         self.update_status()
 
@@ -137,8 +139,9 @@ class Channel():
 
         return interrupts
 
-    def handle_console_input(self, input):
-        self._rxfifo.append(input)
+    def _handle_console_input(self, input):
+        for c in input:
+            self._rxfifo.append(c)
         self.update_status()
         self._parent.update_status()
 
@@ -324,7 +327,7 @@ class MC68681(Device):
         self.trace('init done')
 
     @classmethod
-    def add_arguments(cls, parser, default_console_port='A'):
+    def add_arguments(cls, parser, default_console_port='none'):
         parser.add_argument('--duart-console-port',
                             type=str,
                             choices=['A', 'B', 'none'],
