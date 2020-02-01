@@ -77,7 +77,7 @@ class Console():
             self._update()
             if len(self._buffered_input) > 0:
                 if self._connection is not None:
-                    self._connection.send(self._buffered_input.encode('ascii'))
+                    self._connection.send(self._buffered_input.encode('latin-1'))
                     self._buffered_input = u''
 
     def _accept(self, socket, mask):

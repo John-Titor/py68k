@@ -333,7 +333,7 @@ class P90UART(Device):
         if width == Device.WIDTH8:
             if offset == REG_SBUF:
                 if self._is_console:
-                    self.console_handle.output(chr(value).encode('ascii'))
+                    self.console_handle.output(chr(value).encode('latin-1'))
                 if self._scon & 0x02 == 0:
                     # XXX should be based on time-since-write
                     self._scon |= 0x02  # transmit complete status

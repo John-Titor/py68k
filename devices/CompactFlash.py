@@ -118,10 +118,10 @@ class CompactFlash(Device):
             16383,                          # 1
             16,                             # 3
             63,                             # 6
-            '00000000'.encode('ascii'),     # 10-19
+            '00000000'.encode('latin-1'),     # 10-19
             0,                              # 22
-            '00000000'.encode('ascii'),     # 23-26
-            'py68k emulated CF   '.encode('ascii'),  # 27-46
+            '00000000'.encode('latin-1'),     # 23-26
+            'py68k emulated CF   '.encode('latin-1'),  # 27-46
             1,                              # 47
             0,                              # 49
             0,                              # 51

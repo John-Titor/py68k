@@ -247,7 +247,7 @@ def disassemble(pc, cpu_type):
     n = lib.m68k_disassemble(__dis_buf,
                              c_uint(pc),
                              c_uint(cpu_type))
-    return __dis_buf.value.decode('ascii')
+    return __dis_buf.value.decode('latin-1')
 
 
 """
@@ -303,8 +303,8 @@ def mem_write_memory(address, width, value):
     lib.mem_write_memory(c_uint(address), c_ubyte(width), c_uint(value))
 
 
-def mem_write_bulk(address, bytes):
-    lib.mem_write_bulk(c_uint(address), bytes, c_uint(len(bytes)))
+def mem_write_bulk(address, buffer):
+    lib.mem_write_bulk(c_uint(address), c_char_p(bytes(buffer)), c_uint(len(buffer)))
 
 
 # Callback API

@@ -367,5 +367,5 @@ class StdoutConsole(Device):
         Device.register_console_output_handler(self._send)
 
     def _send(self, output):
-        sys.stdout.write(output.decode('ascii'))
+        sys.stdout.write(output.decode('latin-1'))
         sys.stdout.flush()

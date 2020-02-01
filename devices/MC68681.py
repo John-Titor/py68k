@@ -110,7 +110,7 @@ class Channel():
                 # self._txfifo
 
         elif addr == Channel.REG_TB and self._is_console:
-            self._parent.console_handle_output(chr(value).encode('ascii'))
+            self._parent.console_handle_output(chr(value).encode('latin-1'))
 
         self.update_status()
 
