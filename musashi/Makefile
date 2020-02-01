@@ -38,7 +38,7 @@ $(GEN_FILES): $(GEN_TOOL) $(GEN_INPUT)
 	./$(GEN_TOOL)
 
 $(LIB): $(ALL_SRC) $(ALL_HDR)
-	$(CC) -g -fPIC -shared -o $@ $(ALL_SRC)
+	$(CC) -O3 -fPIC -shared -o $@ $(ALL_SRC)
 
 clean:
 	rm -f $(GEN_TOOL) $(GEN_FILES) $(LIB)

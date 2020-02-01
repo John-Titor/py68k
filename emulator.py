@@ -286,7 +286,7 @@ class Emulator(object):
         self._start_time = time.time()
         while not self._dead:
             cycles_to_run = self._root_device.tick()
-            if (cycles_to_run == 0) or (cycles_to_run > self._quantum):
+            if (cycles_to_run is None) or (cycles_to_run > self._quantum):
                 cycles_to_run = self._quantum
             self._elapsed_cycles += execute(cycles_to_run)
 

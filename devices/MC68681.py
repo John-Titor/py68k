@@ -216,7 +216,7 @@ class Counter():
         return self._interrupting
 
     def _update_state(self):
-        ret = 0
+        ret = None
         current_cycle = self._parent.current_cycle
         if self._mode_is_counter:
             if current_cycle < self._counter_deadline:

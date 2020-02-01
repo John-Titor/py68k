@@ -156,13 +156,10 @@ class Timer(Device):
 
     def tick(self):
         # do nothing if we are disabled
-        if self._period == 0:
-            return 0
-
-        self._count = int((self.current_cycle - self._epoch) / self._divisor) % self._divisor
-        if self._control & Timer.CONTROL_INTEN:
-            return (self._period - self._count) * self._divisor
-        return 0
+        if self._period != 0:
+            self._count = int((self.current_cycle - self._epoch) / self._divisor) % self._divisor
+            if self._control & Timer.CONTROL_INTEN:
+                return (self._period - self._count) * self._divisor
 
     def reset(self):
         self._divisor = int(self.cycle_rate / 1000000)  # 1MHz base clock

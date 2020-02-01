@@ -44,7 +44,7 @@ def configure(args):
 
     emu = Emulator(args,
                    cpu=args.cpu_type,
-                   frequency=args.cpu_frequency)
+                   frequency=args.cpu_frequency * 1000 * 1000)
     emu.add_memory(base=0, size=args.mem_size * 1024 * 1024)
     emu.add_device(args,
                    UART,

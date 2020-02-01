@@ -298,14 +298,15 @@ class RootDevice(Device):
 
     def tick(self):
         self.trace('DEV', info='TICK')
-        deadline = 100000
+        deadline = None
         for dev in Device._devices:
             ret = dev.tick()
             # let the device request an earlier deadline
             if ret is not None:
                 ret = int(ret)
-                if ret > 0 and ret < deadline:
-                    deadline = ret
+                if ret > 0:
+                    if deadline is None or ret < deadline:
+                        deadline = ret
 
         self.check_interrupts()
         return deadline
