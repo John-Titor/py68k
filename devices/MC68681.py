@@ -1,5 +1,5 @@
 import sys
-from device import Device, RootDevice
+from device import Device
 from collections import deque
 
 
@@ -56,6 +56,9 @@ class Channel():
         self._txEnable = False
 
     def read(self, addr):
+        # default read result
+        value = 0xff
+
         if addr == Channel.REG_MR:
             if self._mrAlt:
                 value = self._mr2
@@ -69,10 +72,6 @@ class Channel():
         elif addr == Channel.REG_RB:
             if len(self._rxfifo) > 0:
                 value = self._rxfifo.popleft()
-
-        # default read result
-        else:
-            value = 0xff
 
         self.update_status()
         return value
@@ -149,122 +148,110 @@ class Channel():
 class Counter():
 
     MODE_MASK = 0x70
+    MODE_CTR_TXCA = 0x10
+    MODE_CTR_TXCB = 0x20
     MODE_CTR_XTAL16 = 0x30
     MODE_TMR_XTAL = 0x60
     MODE_TMR_XTAL16 = 0x70
+    MODE_TMR = 0x40
 
     def __init__(self, parent):
         self._parent = parent
-        self._last_tick_cyclecount = 0
-        self._counter_reload = 0x0100
+        self._reload = 0x0001
         self._interrupting = False
+        self._running = False
+        self._timer_deadline = 0
 
         self.set_mode(Counter.MODE_TMR_XTAL16)
-        self._counter_epoch = self._parent.current_cycle + self._period
+        self._timer_epoch = self._parent.current_cycle
 
     def set_mode(self, mode):
         mode &= Counter.MODE_MASK
-        if mode == Counter.MODE_CTR_XTAL16:
-            self._prescale = 16
+        cycle_ratio = self._parent.cycle_rate / 3686400.0
+
+        if (mode == Counter.MODE_CTR_TXCA) or (mode == Counter.MODE_CTR_TXCB):
+            self._prescale = cycle_ratio * 96     # assume 38400bps
+        elif mode == Counter.MODE_CTR_XTAL16:
+            self._prescale = cycle_ratio * 16
         elif mode == Counter.MODE_TMR_XTAL:
-            self._prescale = 1
+            self._prescale = cycle_ratio * 1
         elif mode == Counter.MODE_TMR_XTAL16:
-            self._prescale = 16
+            self._prescale = cycle_ratio * 16
         else:
-            raise RuntimeError(
-                'timer mode 0x{:02x} not supported'.format(mode))
+            raise RuntimeError('timer mode 0x{:02x} not supported'.format(mode))
 
         self._mode = mode
-        if self._mode_is_timer:
-            self._running = True
-            self._timer_toggle = 0
 
     def set_reload_low(self, value):
-        self._counter_reload = (self._counter_reload & 0xff00) | value
+        self._reload = (self._reload & 0xff00) | value
 
     def set_reload_high(self, value):
-        self._counter_reload = (self._counter_reload & 0x00ff) | (value << 8)
+        self._reload = (self._reload & 0x00ff) | (value << 8)
 
     def start(self):
-        self._counter_epoch = self._parent.current_cycle + \
-            self._counter_reload * self._clock_scale_factor
-        self._running = True
-
-        if self._mode_is_timer:
-            self._timer_toggle = 0
+        if self._mode_is_counter:
+            self._running = True
+            self._counter_deadline = self._parent.current_cycle + self._reload * self._prescale
+        else:
+            self._timer_epoch = self._parent.current_cycle
+            self._timer_deadline = self._timer_epoch + self._timer_period
 
     def stop(self):
+        if self._mode_is_counter:
+            self._update_state()
+            self._running = False
+        else:
+            current_cycle = self._parent.current_cycle
+            last_interrupt_cycle = current_cycle - (current_cycle % self._timer_period)
+            self._timer_deadline = last_interrupt_cycle + self._timer_period
         self._interrupting = False
 
-        if self._mode_is_counter:
-            self._running = False
-
-    def get_counter(self):
-        # handle possibly passing the counter epoch; guarantees the epoch is in the future
-        self.tick()
-
-        cycles_remaining = self._counter_epoch - self.current_cycle
-        return int(round(cycles_remaining / self._clock_scale_factor))
+    def get_count(self):
+        self._update_state()
+        return self._count
 
     @property
     def is_interrupting(self):
+        self._update_state()
         return self._interrupting
 
-    def tick(self):
-        """
-        Adjust the state of the counter up to the current time
-        """
-
-        # do nothing if we're not running
-        if not self._running:
-            return 0
-
+    def _update_state(self):
+        ret = 0
         current_cycle = self._parent.current_cycle
-        if current_cycle >= self._counter_epoch:
-            if self._mode_is_counter:
-                self._interrupting = True
-            else:
-                if self._timer_toggle == 0:
-                    self._timer_toggle = 1
-                else:
-                    self._timer_toggle = 0
-                    self._interrupting = 1
-
-            periods_since_epoch = (
-                current_cycle - self._counter_epoch) / self._period
-            self._parent.trace('update', 'late {} period {} since epoch {}'.format(current_cycle - self._counter_epoch,
-                                                                                   self._period,
-                                                                                   periods_since_epoch))
-            self._counter_epoch = self._counter_epoch + \
-                (periods_since_epoch + 1) * self._period
-
-        self._parent.trace('tick', 'at {} deadline {} limit {}'.format(
-            current_cycle, self._counter_epoch, self._counter_epoch - current_cycle))
-
-        # limit the next quantum to the deadline
-        return self._counter_epoch - current_cycle
-
-    @property
-    def _period(self):
         if self._mode_is_counter:
-            # counter wraps to 0xffff
-            value = 0x10000 * self._clock_scale_factor
+            if current_cycle < self._counter_deadline:
+                cycles_remaining = self._counter_deadline - current_cycle
+                self._count = cycles_remaining / self._prescale
+                ret = int(cycles_remaining)
+            else:
+                cycles_past = current_cycle - self._counter_deadline
+                self._count = 0xffff - int((cycles_past / self._prescale) % 0x10000)
+                self._interrupting = True
         else:
-            # timer wraps to reload value
-            value = self._counter_reload * self._clock_scale_factor
-        return int(round(value))
+            counts_elapsed = int((current_cycle - self._timer_epoch) / self._prescale)
+            self._count = self._reload - int(counts_elapsed % (self._reload + 1))
+
+            if current_cycle > self._timer_deadline:
+                self._interrupting = True
+                ret = self._timer_period
+            else:
+                ret = self._timer_deadline - current_cycle
+        return ret
+
+    def tick(self):
+        return self._update_state()
 
     @property
     def _mode_is_counter(self):
-        return self._mode < 0x40
+        return not self._mode_is_timer
 
     @property
     def _mode_is_timer(self):
-        return not self._mode_is_counter
+        return self._mode & Counter.MODE_TMR
 
     @property
-    def _clock_scale_factor(self):
-        return (self._parent.cycle_rate / 3.6) * self._prescale
+    def _timer_period(self):
+        return 2 * self._reload * self._prescale
 
 
 class MC68681(Device):
@@ -413,6 +400,7 @@ class MC68681(Device):
     def tick(self):
         quantum = self._counter.tick()
         self.update_status()
+        self.trace('DUART', info=f'tick isr {self._isr:#x} imr {self._imr:#x}')
         return quantum
 
     def reset(self):
@@ -425,13 +413,15 @@ class MC68681(Device):
         self._countReload = 0xffff
 
     def get_interrupt(self):
+        self.update_status()
         if self._isr & self._imr:
             return self._interrupt
         return 0
 
     def get_vector(self, interrupt):
-        if self._isr & self._imr:
-            return self._ivr
+        if interrupt == self._interrupt:
+            if self._isr & self._imr:
+                return self._ivr
         return M68K_IRQ_SPURIOUS
 
     def update_status(self):
