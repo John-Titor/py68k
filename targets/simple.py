@@ -3,7 +3,7 @@ from devices.Synthetic import UART, Timer
 
 
 def add_arguments(parser):
-    parser.add_argument('--cpu',
+    parser.add_argument('--cpu_type',
                         type=str,
                         choices=['68000',
                                  '68010',
@@ -16,7 +16,7 @@ def add_arguments(parser):
                                  '68040',
                                  'SCC68070'],
                         metavar='CPU-TYPE',
-                        default='68000'
+                        default='68000',
                         help='CPU to emulate')
     parser.add_argument('--cpu-frequency',
                         type=int,
@@ -42,10 +42,10 @@ def configure(args):
     else:
         iobase = 0xffff0000
 
-    emu = emulator.Emulator(args,
-                            cpu=args.cpu,
-                            frequency=args.frequency)
-    emu.add_memory(base=0, size=args.mem_size)
+    emu = Emulator(args,
+                   cpu=args.cpu_type,
+                   frequency=args.cpu_frequency)
+    emu.add_memory(base=0, size=args.mem_size * 1024 * 1024)
     emu.add_device(args,
                    UART,
                    address=iobase,

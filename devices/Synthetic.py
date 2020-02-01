@@ -11,7 +11,7 @@ class UART(Device):
         'SR': 0x01,
         'DR': 0x03,
         'CR': 0x05,
-        'VR': 0x07
+        'VR': 0x07,
     }
     SR_RXRDY = 0x01
     SR_TXRDY = 0x02
@@ -21,9 +21,9 @@ class UART(Device):
 
     _unit = 0
 
-    def __init__(self, args, base, interrupt):
-        super(uart, self).__init__(args=args, name='uart',
-                                   address=base, interrupt=interrupt)
+    def __init__(self, args, address, interrupt):
+        super(UART, self).__init__(args=args, name='uart',
+                                   address=address, interrupt=interrupt)
         self.map_registers(self._registers)
         self.reset()
         self._unit = UART._unit
@@ -31,6 +31,7 @@ class UART(Device):
         if self._unit == 0:
             self.register_console_input_handler(self._handle_console_input)
 
+    @classmethod
     def add_arguments(self, parser):
         pass
 
@@ -40,14 +41,14 @@ class UART(Device):
             if addr == self._registers['SR']:
                 if self._can_tx:
                     value |= UART.SR_TXRDY
-                if len(self._rx_fifo) > 0:
+                if len(self._rxfifo) > 0:
                     value |= UART.SR_RXRDY
             elif addr == self._registers['DR']:
-                if len(self._rx_fifo) > 0:
+                if len(self._rxfifo) > 0:
                     value = self._rxfifo.popleft()
             elif addr == self._registers['CR']:
                 value = self._cr
-            elif addr = self._registers['VR']:
+            elif addr == self._registers['VR']:
                 value = self._vr
 
         return value
@@ -58,8 +59,8 @@ class UART(Device):
                 if self._can_tx:
                     self.trace('write', f'{self._unit}{chr(value)}')
                     if self._unit == 0:
-                        self.console_handle_output(chr(value).encode('ascii'))
-                    self._last_tx_cycle = self.current_cycle()
+                        self.console_handle_output(chr(value).encode('latin-1'))
+                    self._last_tx_cycle = self.current_cycle
             elif addr == self._registers['CR']:
                 self._cr = value
             elif addr == self._registers['VR']:
@@ -86,14 +87,18 @@ class UART(Device):
     @property
     def _can_tx(self):
         # pace transmit to one character every 1000 cycles
-        return self.current_cycle() > (self._last_tx_cycle + 1000)
+        return self.current_cycle > (self._last_tx_cycle + 1000)
 
     @property
     def _interrupting(self):
         if self._cr & UART.CR_TX_INTEN and self._can_tx:
             return True
-        if self._cr & UART.CR_RX_INTEN and len(self._rx_fifo) > 0:
+        if self._cr & UART.CR_RX_INTEN and len(self._rxfifo) > 0:
             return True
+
+    def _handle_console_input(self, input):
+        for c in input:
+            self._rxfifo.append(c)
 
 
 class Timer(Device):
@@ -103,18 +108,19 @@ class Timer(Device):
 
     _registers = {
         'PERIOD': 0x00,
-        'COUNT': 0x04
-        'CONTROL': 0x09
-        'VECTOR': 0x0b
+        'COUNT': 0x04,
+        'CONTROL': 0x09,
+        'VECTOR': 0x0b,
     }
     CONTROL_INTEN = 0x01
 
-    def __init__(self, args, base, interrupt):
-        super(timer, self).__init__(args=args, name='timer',
-                                    address=base, interrupt=interrupt)
+    def __init__(self, args, address, interrupt):
+        super(Timer, self).__init__(args=args, name='timer',
+                                    address=address, interrupt=interrupt)
         self.map_registers(self._registers)
         self.reset()
 
+    @classmethod
     def add_arguments(self, parser):
         pass
 
@@ -126,7 +132,7 @@ class Timer(Device):
             if addr == self._registers['COUNT']:
                 self.tick()
                 value = self._count
-        elif width = Device.WIDTH_8:
+        elif width == Device.WIDTH_8:
             if addr == self._registers['CONTROL']:
                 value = self._control
             if addr == self._registers['VECTOR']:
