@@ -66,7 +66,7 @@ class ELFLoader(object):
     """
     Read a simple ELF executable; should be linked with text at 0,
     with relocations, text/data/BSS in ascending address order and reasonably
-    contiguous. 
+    contiguous.
 
     At most one read-execute and one read-write segment are supported; normally
     this should be .text / .data and friends.
@@ -180,10 +180,10 @@ class ELFLoader(object):
                 # what section do these relocations affect?
                 relocSection = ef.get_section(section['sh_info'])
                 if not (relocSection['sh_flags'] & SH_FLAGS.SHF_ALLOC):
-                    #print('Not relocating {}'.format(relocSection.name))
+                    # print('Not relocating {}'.format(relocSection.name))
                     continue
 
-                #print('Relocate: {} using {}'.format(relocSection.name, section.name))
+                # print('Relocate: {} using {}'.format(relocSection.name, section.name))
                 symtab = ef.get_section(section['sh_link'])
 
                 for reloc in section.iter_relocations():
@@ -210,21 +210,21 @@ class ELFLoader(object):
                     if relType == R_68K_32:
                         pass
                     elif relType == R_68K_NONE:
-                        #print('ignoring none-reloc @ 0x{:x}'.format(relAddress))
+                        # print('ignoring none-reloc @ 0x{:x}'.format(relAddress))
                         continue
                     elif relType == R_68K_PC32:
-                        #print('ignoring PC32 reloc @ 0x{:x} -> 0x{:x}+{:x}'.format(relAddress, relTarget, relAddend))
+                        # print('ignoring PC32 reloc @ 0x{:x} -> 0x{:x}+{:x}'.format(relAddress, relTarget, relAddend))
                         continue
                     elif relType == R_68K_PC16:
-                        #print('ignoring PC16 reloc @ 0x{:x} -> 0x{:x}+{:x}'.format(relAddress, relTarget, relAddend))
+                        # print('ignoring PC16 reloc @ 0x{:x} -> 0x{:x}+{:x}'.format(relAddress, relTarget, relAddend))
                         continue
                     elif relType == R_68K_PC8:
-                        #print('ignoring PC8 reloc @ 0x{:x} -> 0x{:x}+{:x}'.format(relAddress, relTarget, relAddend))
+                        # print('ignoring PC8 reloc @ 0x{:x} -> 0x{:x}+{:x}'.format(relAddress, relTarget, relAddend))
                         continue
                     else:
                         raise RuntimeError('unexpected relocation type {} @ 0x{:x} -> 0x{:x}+x'.format(relType, relAddress, relTarget, relAddend))
 
-                    #print('RELA address 0x{:08x} target 0x{:x} type {} addend 0x{:x}'.format(relAddress, relTarget, relType, relAddend))
+                    # print('RELA address 0x{:08x} target 0x{:x} type {} addend 0x{:x}'.format(relAddress, relTarget, relType, relAddend))
 
                     if relTarget < len(text):
                         relType |= R_TEXT
@@ -243,7 +243,7 @@ class ELFLoader(object):
                         raise RuntimeError(
                             'relocation target not in known space')
 
-                    #print('    -> type 0x{:03x}'.format(relType))
+                    # print('    -> type 0x{:03x}'.format(relType))
 
                     if relAddress < len(text):
                         inSeg = text
@@ -255,7 +255,7 @@ class ELFLoader(object):
                         raise RuntimeError('relocation not in known space')
 
                     unRelocated = struct.unpack('>L', inSeg[segOffset:segOffset+4])[0]
-                    #print('    unrelocated: 0x{:x}'.format(unRelocated))
+                    # print('    unrelocated: 0x{:x}'.format(unRelocated))
 
                     if unRelocated != (relTarget + relAddend):
                         raise RuntimeError("unrelocated field 0x{:x} != target 0x{:x} + addend 0x{:x}".format(unRelocated, relTarget, relAddend))

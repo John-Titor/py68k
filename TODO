@@ -3,9 +3,14 @@ Things to investigate / fix:
   ☐ tabs don't print correctly
   ✔ add reset hook & pass reset to peripherals @done (20-01-28 15:54)
   ✘ look at pyglet to handle console @cancelled (20-01-28 15:55)
-  ☐ emulator.cb_buserror <- do something useful here
-  ☐ use device mapping handle to find devices faster? (limitation of 1 device per page regardless...)
+  ✘ emulator.cb_buserror <- do something useful here @cancelled (20-01-31 09:34)
+  ✘ use device mapping handle to find devices faster? (limitation of 1 device per page regardless...) @cancelled (20-01-31 09:34)
   ☐ fix console in/output paths to be bytes all the way through
+  ☐ fix disassembly
+  ☐ fix symbolication
+  ☐ fix tracing triggers
+  ☐ 68681 timer interrupts are broken, counter mode is broken
+  ✔ need to allow devices on arbitrary address boundaries; 4K is too coarse @done (20-01-31 09:34)
   
 Features:
   ✔ need new memory model, support multiple disjoint memories (RAM, ROM), > 16MiB @done (20-01-28 15:54)
@@ -17,9 +22,9 @@ Features:
     ✔ table entry: valid bit, writable bit, handler ID @done (20-01-24 21:51)
     ✔ handlers for memory, device @done (20-01-24 21:51)
     ✔ emulator access to memory @done (20-01-25 23:24)
-  ☐ multiple ELF files for symbol lookup
-  ☐ load ELF file to RAM & go
-  ☐ inject arbitrary RAM contents
+  ✔ multiple ELF files for symbol lookup @done (20-01-30 09:01)
+  ✔ load ELF file to RAM & go @done (20-01-31 09:34)
+  ✘ inject arbitrary RAM contents @cancelled (20-01-31 09:34)
 
 Devices:
   I2C:
@@ -44,16 +49,16 @@ Tiny68k:
   
 P90MB:
   ☐ device models
-    ☐ UARTs
-    ☐ CompactFlash
-    ☐ Timers
-    ☐ flash write interface
+    ✔ UART @done (20-01-29 09:09)
+    ✔ CompactFlash @done (20-01-29 09:09)
+    ✔ Timers @done (20-01-31 09:35)
+    ☐ external interrupt controller
     ☐ I2C
     ☐ RC2014 boards?
-  ☐ --rom commandline argument, places code in ROM
+  ✔ --rom commandline argument, places code in ROM @done (20-01-31 09:35)
 
 Simple:
-  ☐ fix device models
+  ✔ fix device models @done (20-01-30 10:08)
   ☐ test cases
   
 EmuTOS:

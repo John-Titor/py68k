@@ -1,13 +1,58 @@
-import emulator
-import device
+from emulator import Emulator, M68K_IRQ_2, M68K_IRQ_6
+from devices.Synthetic import UART, Timer
+
+
+def add_arguments(parser):
+    parser.add_argument('--cpu',
+                        type=str,
+                        choices=['68000',
+                                 '68010',
+                                 '68EC020',
+                                 '68020',
+                                 '68EC030',
+                                 '68030',
+                                 '68EC040',
+                                 '68LC040',
+                                 '68040',
+                                 'SCC68070'],
+                        metavar='CPU-TYPE',
+                        default='68000'
+                        help='CPU to emulate')
+    parser.add_argument('--cpu-frequency',
+                        type=int,
+                        choices=range(1, 100),
+                        metavar='FREQUENCY-MHZ',
+                        default=8,
+                        help='CPU frequency to emulate')
+    parser.add_argument('--mem-size',
+                        type=int,
+                        choices=range(1, 255),
+                        default=15,
+                        metavar='SIZE-MB',
+                        help='memory size')
+    UART.add_arguments(parser)
+    Timer.add_arguments(parser)
 
 
 def configure(args):
-    emu = emulator.Emulator(args, memory_size=128)
+    if args.cpu_type == '68000':
+        if args.mem_size > 15:
+            raise RuntimeError('max memory for 68000 emulation is 15MB')
+        iobase = 0xff0000
+    else:
+        iobase = 0xffff0000
 
-    # add some devices
-    emu.add_device(args, device.RootDevice, 0xff0000)
-    emu.add_device(args, device.uart, 0xff0000, emulator.M68K_IRQ_2)
-    emu.add_device(args, device.timer, 0xff1000, emulator.M68K_IRQ_6)
+    emu = emulator.Emulator(args,
+                            cpu=args.cpu,
+                            frequency=args.frequency)
+    emu.add_memory(base=0, size=args.mem_size)
+    emu.add_device(args,
+                   UART,
+                   address=iobase,
+                   interrupt=M68K_IRQ_2)
+    emu.add_device(args,
+                   Timer,
+                   address=iobase + 0x1000,
+                   interrupt=M68K_IRQ_6)
 
     return emu
