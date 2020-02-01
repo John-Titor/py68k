@@ -1,5 +1,5 @@
 from emulator import Emulator, M68K_IRQ_2, M68K_IRQ_6
-from devices.Synthetic import UART, Timer
+from devices.simple import UART, Timer
 
 
 def add_arguments(parser):
