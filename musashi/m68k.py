@@ -74,12 +74,10 @@ M68K_IRQ_7 = 7
 
 MEM_PAGE_SIZE = 4096
 MEM_PAGE_MASK = MEM_PAGE_SIZE - 1
-MEM_READ = 0
-MEM_WRITE = 1
-DEV_READ = 2
-DEV_WRITE = 3
-INVALID_READ = 4
-INVALID_WRITE = 5
+MEM_READ = ord('R')
+MEM_WRITE = ord('W')
+INVALID_READ = ord('r')
+INVALID_WRITE = ord('w')
 MEM_WIDTH_8 = 0
 MEM_WIDTH_16 = 1
 MEM_WIDTH_32 = 2
@@ -128,10 +126,10 @@ def set_reset_instr_callback(func):
     lib.m68k_set_reset_instr_callback(reset_instr_callback)
 
 
-def set_pc_changed_callback(func):
-    global pc_changed_callback
-    pc_changed_callback = pc_changed_callback_func_type(func)
-    lib.m68k_set_pc_changed_callback(pc_changed_callback)
+# def set_pc_changed_callback(func):
+#     global pc_changed_callback
+#     pc_changed_callback = pc_changed_callback_func_type(func)
+#     lib.m68k_set_pc_changed_callback(pc_changed_callback)
 
 
 def set_tas_instr_callback(func):
@@ -152,10 +150,10 @@ def set_fc_callback(func):
     lib.m68k_set_fc_callback(fc_callback)
 
 
-def set_instr_hook_callback(func):
-    global instr_hook_callback
-    instr_hook_callback = instr_hook_callback_func_type(func)
-    lib.m68k_set_instr_hook_callback(instr_hook_callback)
+# def set_instr_hook_callback(func):
+#     global instr_hook_callback
+#     instr_hook_callback = instr_hook_callback_func_type(func)
+#     lib.m68k_set_instr_hook_callback(instr_hook_callback)
 
 
 lib.m68k_get_virq.restype = c_uint
@@ -246,7 +244,7 @@ def is_valid_instruction(instr, cpu_type):
 
 
 def disassemble(pc, cpu_type):
-    n = lib.m68k_disassemble(c_char_p(__dis_buf),
+    n = lib.m68k_disassemble(__dis_buf,
                              c_uint(pc),
                              c_uint(cpu_type))
     return __dis_buf.value.decode('ascii')
@@ -261,7 +259,7 @@ unsigned int m68k_disassemble_raw(char* str_buff, unsigned int pc, const unsigne
 lib.mem_add_memory.restype = c_bool
 lib.mem_add_device.restype = c_bool
 lib.mem_read_memory.restype = c_uint
-device_handler_func_type = CFUNCTYPE(c_uint, c_int, c_uint, c_uint, c_ubyte, c_uint)
+device_handler_func_type = CFUNCTYPE(c_uint, c_int, c_uint, c_ubyte, c_uint)
 trace_handler_func_type = CFUNCTYPE(None, c_int, c_uint, c_ubyte, c_uint)
 
 
@@ -272,10 +270,9 @@ def mem_add_memory(base, size, writable=True, with_bytes=None):
                               c_char_p(with_bytes))
 
 
-def mem_add_device(base, size, handle):
+def mem_add_device(base, size):
     return lib.mem_add_device(c_uint(base),
-                              c_uint(size),
-                              c_uint(handle))
+                              c_uint(size))
 
 
 def mem_set_device_handler(func):
@@ -308,3 +305,18 @@ def mem_write_memory(address, width, value):
 
 def mem_write_bulk(address, bytes):
     lib.mem_write_bulk(c_uint(address), bytes, c_uint(len(bytes)))
+
+
+# Callback API
+
+
+def set_pc_changed_callback(func):
+    global pc_changed_callback
+    pc_changed_callback = pc_changed_callback_func_type(func)
+    lib.set_pc_changed_callback(pc_changed_callback)
+
+
+def set_instr_hook_callback(func):
+    global instr_hook_callback
+    instr_hook_callback = instr_hook_callback_func_type(func)
+    lib.set_instr_hook_callback(instr_hook_callback)

@@ -3,7 +3,7 @@ import sys
 import signal
 import traceback
 
-# import imageELF
+from imageELF import ELFImage
 # import imageBIN
 
 from device import RootDevice
@@ -107,7 +107,27 @@ class Emulator(object):
         'SR': M68K_REG_SR,
         'SP': M68K_REG_SP,
         'USP': M68K_REG_USP,
-        'SSP': M68K_REG_ISP
+        'SSP': M68K_REG_ISP,
+    }
+
+    cpu_map = {
+        '68000': M68K_CPU_TYPE_68000,
+        '68010': M68K_CPU_TYPE_68010,
+        '68EC020': M68K_CPU_TYPE_68EC020,
+        '68020': M68K_CPU_TYPE_68020,
+        '68EC030': M68K_CPU_TYPE_68EC030,
+        '68030': M68K_CPU_TYPE_68030,
+        '68EC040': M68K_CPU_TYPE_68EC040,
+        '68LC040': M68K_CPU_TYPE_68LC040,
+        '68040': M68K_CPU_TYPE_68040,
+        'SCC68070': M68K_CPU_TYPE_SCC68070,
+    }
+
+    operation_map = {
+        MEM_READ: 'READ',
+        MEM_WRITE: 'WRITE',
+        INVALID_READ: 'BAD_READ',
+        INVALID_WRITE: 'BAD_WRITE'
     }
 
     def __init__(self, args, cpu="68000", frequency=8000000):
@@ -127,9 +147,6 @@ class Emulator(object):
         self._trace_cycle_limit = 0
         self._check_PC_in_text = False
 
-        self._trace_read_triggers = list()
-        self._trace_write_triggers = list()
-        self._trace_instruction_triggers = list()
         self._trace_exception_list = list()
         self._trace_jump_cache = dict()
 
@@ -146,27 +163,9 @@ class Emulator(object):
         self._reset_hooks = list()
 
         # intialise the CPU
-        if cpu == "68000":
-            self._cpu_type = M68K_CPU_TYPE_68000
-        elif cpu == "68010":
-            self._cpu_type = M68K_CPU_TYPE_68010
-        elif cpu == "68EC020":
-            self._cpu_type = M68K_CPU_TYPE_68EC020
-        elif cpu == "68020":
-            self._cpu_type = M68K_CPU_TYPE_68020
-        elif cpu == "68EC030":
-            self._cpu_type = M68K_CPU_TYPE_68EC030
-        elif cpu == "68030":
-            self._cpu_type = M68K_CPU_TYPE_68030
-        elif cpu == "68EC040":
-            self._cpu_type = M68K_CPU_TYPE_68EC040
-        elif cpu == "68LC040":
-            self._cpu_type = M68K_CPU_TYPE_68LC040
-        elif cpu == "68040":
-            self._cpu_type = M68K_CPU_TYPE_68040
-        elif cpu == "SCC68070":
-            self._cpu_type = M68K_CPU_TYPE_SCC68070
-        else:
+        try:
+            self._cpu_type = self.cpu_map[cpu]
+        except KeyError:
             raise RuntimeError(f"unsupported CPU: {cpu}")
 
         set_cpu_type(self._cpu_type)
@@ -179,38 +178,42 @@ class Emulator(object):
         # set tracing options
         if args.trace_memory or args.trace_everything:
             self.trace_enable('memory')
-        for i in args.trace_read_trigger:
-            self.trace_enable('read-trigger', i)
-        for i in args.trace_write_trigger:
-            self.trace_enable('write-trigger', i)
         if args.trace_instructions or args.trace_everything:
             self.trace_enable('instructions')
-        for i in args.trace_instruction_trigger:
-            self.trace_enable('instruction-trigger', i)
         if args.trace_jumps or args.trace_everything:
             self.trace_enable('jumps')
         if args.trace_exceptions or args.trace_everything:
             self.trace_enable('exceptions')
-        for i in args.trace_exception:
-            self.trace_enable('exception', i)
-        if args.trace_cycle_limit > 0:
-            self.trace_enable('trace-cycle-limit', args.trace_cycle_limit)
-        if args.trace_check_PC_in_text or args.trace_everything:
-            self.trace_enable('check-pc-in-text')
 
         if args.cycle_limit > 0:
             self._cycle_limit = args.cycle_limit
         else:
             self._cycle_limit = sys.maxsize
 
+        # load an executable?
+        if args.load is not None:
+            load_image = ELFImage(args.load)
+            self._symbol_files += load_image
+
+            # relocate to the load address & write to memory
+            entrypoint, sections = load_image.relocate(args.load_address)
+            for section_address, section_data in sections().items():
+                mem_write_bulk(section_address, section_data)
+
+            # patch the reset vector
+            mem_write_memory(0x4, MEM_WIDTH_32, entrypoint)
+
         # add symbol files
-        self._symbol_files = args.symbols
+        self._symbol_files = list()
+        if args.symbols is not None:
+            for symfile in args.symbols:
+                self._symbol_files.append(ELFImage(symfile))
 
         # wire up the root device
         self.add_device(args, RootDevice)
 
     @classmethod
-    def add_arguments(cls, parser):
+    def add_arguments(cls, parser, default_load_address=0x400):
 
         parser.add_argument('--trace-file',
                             type=str,
@@ -227,60 +230,29 @@ class Emulator(object):
         parser.add_argument('--trace-memory',
                             action='store_true',
                             help='enable memory tracing at startup')
-        parser.add_argument('--trace-read-trigger',
-                            action='append',
-                            type=str,
-                            default=list(),
-                            metavar='ADDRESS-or-NAME',
-                            help='enable memory tracing when ADDRESS-or-NAME is read')
-        parser.add_argument('--trace-write-trigger',
-                            action='append',
-                            type=str,
-                            default=list(),
-                            metavar='ADDRESS-or-NAME',
-                            help='enable memory tracing when ADDRESS-or-NAME is written')
         parser.add_argument('--trace-instructions',
                             action='store_true',
                             help='enable instruction tracing at startup (implies --trace-jumps)')
-        parser.add_argument('--trace-instruction-trigger',
-                            action='append',
-                            type=str,
-                            default=list(),
-                            metavar='ADDRESS-or-NAME',
-                            help='enable instruction and jump tracing when execution reaches ADDRESS-or-NAME')
         parser.add_argument('--trace-jumps',
                             action='store_true',
                             help='enable branch tracing at startup')
         parser.add_argument('--trace-exceptions',
                             action='store_true',
                             help='enable tracing all exceptions at startup')
-        parser.add_argument('--trace-exception',
-                            type=int,
-                            action='append',
-                            default=list(),
-                            metavar='EXCEPTION',
-                            help='enable tracing for EXCEPTION at startup (may be specified more than once)')
-        parser.add_argument('--trace-io',
-                            action='store_true',
-                            help='enable tracing of I/O space accesses')
-        parser.add_argument('--trace-cycle-limit',
-                            type=int,
-                            default=0,
-                            metavar='CYCLES',
-                            help='stop the emulation after CYCLES following an instruction or memory trigger')
-        parser.add_argument('--trace-check-PC-in-text',
-                            action='store_true',
-                            help='when tracing instructions, stop if the PC lands outside the text section')
         parser.add_argument('--symbols',
                             type=str,
                             action='append',
                             metavar='ELF-SYMFILE',
                             help='add ELF objects containing symbols for symbolicating trace')
-#        parser.add_argument('image',
-#                            type=str,
-#                            default='none',
-#                            metavar='IMAGE',
-#                            help='executable to load')
+        parser.add_argument('--load',
+                            type=str,
+                            metavar='ELF-PROGRAM',
+                            help='load an ELF program (may require ROM load to be disabled)')
+        parser.add_argument('--load-address',
+                            type=int,
+                            metavar='LOAD-ADDRESS',
+                            default=default_load_address,
+                            help='relocate loaded ELF programs to this address before running')
 
     def loadImage(self, image_filename):
         try:
@@ -299,7 +271,7 @@ class Emulator(object):
 
     def run(self):
         signal.signal(signal.SIGINT, self._keyboard_interrupt)
-        print('\nHit ^C three times quickly to exit\n')
+        print('\nHit ^C to exit\n')
 
         # reset everything
         self.cb_reset()
@@ -310,6 +282,7 @@ class Emulator(object):
         self._start_time = time.time()
         while not self._dead:
             cycles_to_run = self._root_device.tick()
+            self.trace('START', info=f'{cycles_to_run}')
             if (cycles_to_run == 0) or (cycles_to_run > self._quantum):
                 cycles_to_run = self._quantum
             self._elapsed_cycles += execute(cycles_to_run)
@@ -381,31 +354,10 @@ class Emulator(object):
             mem_set_trace_handler(self.cb_trace_memory)
             mem_enable_tracing(True)
 
-# XXX
-#        elif what == 'read-trigger':
-#            addrs = self._image.symrange(option)
-#            self._trace_read_triggers.extend(addrs)
-#            self.log('adding memory read trigger: {}'.format(option))
-#            mem_set_trace_handler(self.cb_trace_memory)
-#            mem_enable_tracing(True)
-#
-#        elif what == 'write-trigger':
-#            addrs = self._image.symrange(option)
-#            self._trace_write_triggers.extend(addrs)
-#            self.log('adding memory write trigger: {}'.format(option))
-#            mem_set_trace_handler(self.cb_trace_memory)
-#            mem_enable_tracing(True)
-#
         elif what == 'instructions':
             self._trace_instructions = True
             set_instr_hook_callback(self.cb_trace_instruction)
             self.trace_enable('jumps')
-
-#        elif what == 'instruction-trigger':
-#            addrs = self._image.symrange(option)
-#            self._trace_instruction_triggers.append(addrs[0])
-#            self.log('adding instruction trigger: {}'.format(option))
-#            set_instr_hook_callback(self.cb_trace_instruction)
 
         elif what == 'jumps':
             self._trace_jumps = True
@@ -415,26 +367,16 @@ class Emulator(object):
             self._trace_exception_list.extend(range(1, 255))
             set_pc_changed_callback(self.cb_trace_jump)
 
-        elif what == 'exception':
-            self._trace_exception_list.append(option)
-            set_pc_changed_callback(self.cb_trace_jump)
-
-        elif what == 'trace-cycle-limit':
-            self._trace_cycle_limit = option
-
-        elif what == 'check-pc-in-text':
-            self._check_PC_in_text = True
-
         else:
             raise RuntimeError('bad tracing option {}'.format(what))
 
     def trace(self, action, address=None, info=''):
-
+        """
+        Cut a trace entry
+        """
         if address is not None:
-            # XXX
-            #            symname = self._image.symname(address)
-            symname = 'FIXME'
-            if symname != '':
+            symname = self._sym_for_address(address)
+            if symname is not None:
                 afield = '{} / {:#08x}'.format(symname, address)
             else:
                 afield = '{:#08x}'.format(address)
@@ -445,78 +387,54 @@ class Emulator(object):
 
         self._trace_file.write(msg + '\n')
 
-    def _trace_trigger(self, address, kind, actions):
-        self.trace('TRIGGER', address, '{} trigger'.format(kind))
-        for action in actions:
-            self.trace_enable(action)
-        if self._trace_cycle_limit > 0:
-            self._cycle_limit = min(
-                self._cycle_limit, self._elapsed_cycles + self._trace_cycle_limit)
-
     def log(self, msg):
         print(msg)
         self._trace_file.write(msg + '\n')
+
+    def _sym_for_address(self, address):
+        for symfile in self._symbol_files:
+            _, _, function = symfile.get_address_info(address)
+            if function is not None:
+                return function
+        return None
 
     def cb_trace_memory(self, operation, addr, width, value):
         """
         Cut a memory trace entry
         """
         try:
-            if operation == MEM_READ:
-                if not self._trace_memory and addr in self._trace_read_triggers:
-                    self._trace_trigger(addr, 'memory', ['memory'])
-                direction = 'READ'
-            elif operation == MEM_WRITE:
-                if not self._trace_memory and addr in self._trace_write_triggers:
-                    self._trace_trigger(addr, 'memory', ['memory'])
-                direction = 'WRITE'
-            elif operation == INVALID_READ:
-                if not self._trace_memory and addr in self._trace_read_triggers:
-                    self._trace_trigger(addr, 'memory', ['memory'])
-                direction = 'BAD_READ'
-            elif operation == INVALID_WRITE:
-                if not self._trace_memory and addr in self._trace_write_triggers:
-                    self._trace_trigger(addr, 'memory', ['memory'])
-                direction = 'BAD_WRITE'
+            action = self.operation_map[operation]
+            if width == MEM_WIDTH_8:
+                info = f'{value:#04x}'
+            elif width == MEM_WIDTH_16:
+                info = f'{value:#06x}'
+            elif width == MEM_WIDTH_32:
+                info = f'{value:#010x}'
             else:
-                raise RuntimeError(f'unexpected operation {operation}')
+                info = f'UNEXPECTED OPERATION WIDTH'
 
-            if self._trace_memory:
-                if width == MEM_WIDTH_8:
-                    info = f'{value:#04x}'
-                elif width == MEM_WIDTH_16:
-                    info = f'{value:#06x}'
-                elif width == MEM_WIDTH_32:
-                    info = f'{value:#010x}'
-                else:
-                    raise RuntimeError(f'unexpected trace width {width}')
+            self.trace(action, addr, info)
 
-                self.trace(direction, addr, info)
         except Exception:
             self.fatal_exception(sys.exc_info())
 
         return 0
 
-    def cb_trace_instruction(self):
+    def cb_trace_instruction(self, pc):
         """
         Cut an instruction trace entry
         """
         try:
-            pc = get_reg(M68K_REG_PC)
-            if not self._trace_instructions and pc in self._trace_instruction_triggers:
-                self._trace_trigger(pc, 'instruction', [
-                                    'instructions', 'jumps'])
+            dis = disassemble(pc, self._cpu_type)
+            info = ''
+            for reg in self.registers:
+                if dis.find(reg) is not -1:
+                    info += ' {}={:#x}'.format(reg,
+                                               get_reg(self.registers[reg]))
 
-            if self._trace_instructions:
-                dis = disassemble(pc, self._cpu_type)
-                info = ''
-                for reg in self.registers:
-                    if dis.find(reg) is not -1:
-                        info += ' {}={:#x}'.format(reg,
-                                                   get_reg(self.registers[reg]))
+            self.trace('EXECUTE', pc, '{:30} {}'.format(dis, info))
+            return
 
-                self.trace('EXECUTE', pc, '{:30} {}'.format(dis, info))
-                return
         except Exception:
             self.fatal_exception(sys.exc_info())
 
@@ -524,7 +442,8 @@ class Emulator(object):
         """
         Trace reset instructions
         """
-        # might want to end here due to memory issues
+
+        # might want to end here due to memory issues?
         end_timeslice()
 
         # call reset hooks
@@ -534,7 +453,7 @@ class Emulator(object):
             except Exception:
                 self.fatal_exception(sys.exc_info())
 
-    def cb_illg(self):
+    def cb_illg(self, instr):
         """
         Illegal instruction handler - implement 'native features' emulator API
         """
@@ -547,24 +466,12 @@ class Emulator(object):
         a function call, return or exception
         """
         try:
-            if self._trace_jumps:
-                # XXX
-                # self.trace('JUMP', new_pc, self._image.lineinfo(new_pc))
-                self.trace('JUMP', new_pc, 'FIXME')
+            self.trace('JUMP', address=new_pc)
         except Exception:
             self.fatal_exception(sys.exc_info())
 
     def _keyboard_interrupt(self, signal=None, frame=None):
-        now = time.time()
-        interval = now - self._first_interrupt_time
-
-        if interval >= 1.0:
-            self._first_interrupt_time = now
-            self._interrupt_count = 1
-        else:
-            self._interrupt_count += 1
-            if self._interrupt_count >= 3:
-                self.fatal('Exit due to user interrupt.')
+            self.fatal('\rExit due to user interrupt.')
 
     def fatal_exception(self, exception_info):
         """

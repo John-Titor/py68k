@@ -19,10 +19,13 @@
 # define debug(fmt, ...)    do {} while(0)
 #endif
 
-#define MEM_PAGE_SIZE   (1U<<12)
-#define MEM_SIZE        (1ULL<<32)
-#define MEM_PAGES       (MEM_SIZE / MEM_PAGE_SIZE)
+#define MEM_PAGE_SIZE   ((uint32_t)1 << 12)
+#define MEM_SIZE        ((uint64_t)1 << 32)
+#define MEM_NUM_PAGES   ((uint32_t)(MEM_SIZE / MEM_PAGE_SIZE))
 #define MEM_NUM_IDS     64
+
+#define PAGE_ROUND_DOWN(_x) (((uint32_t)(_x)) & (~(MEM_PAGE_SIZE - 1)))
+#define PAGE_ROUND_UP(_x) ( (((uint32_t)(_x)) + MEM_PAGE_SIZE - 1)  & (~(MEM_PAGE_SIZE - 1)) ) 
 
 typedef struct
 {
@@ -39,16 +42,8 @@ typedef struct
     bool        writable;
 } mem_buffer_t;
 
-typedef struct
-{
-    uint32_t    handle;
-    uint32_t    base;
-    uint32_t    size;
-} mem_device_t;
-
-static pte_t                mem_pagetable[MEM_PAGES];
+static pte_t                mem_pagetable[MEM_NUM_PAGES];
 static mem_buffer_t         mem_buffers[MEM_NUM_IDS];
-static mem_device_t         mem_devices[MEM_NUM_IDS];
 
 static bool                 mem_bus_error_enabled;
 static bool                 mem_trace_enabled;
@@ -72,13 +67,9 @@ mem_read(uint32_t address, mem_width_t width)
 
     if (pte.valid) {
         if (pte.device) {
-            mem_device_t *dp = mem_devices + pte.id;
-            if (dp->size) {
-                uint32_t offset = address - dp->base;
-                uint32_t ret = mem_dev_handler(DEV_READ, dp->handle, offset, width, 0);
-//                mem_trace(DEV_READ, address, width, ret);
-                return ret;
-            }
+            uint32_t ret = mem_dev_handler(MEM_READ, address, width, 0);
+//            mem_trace(MEM_READ, address, width, ret);
+            return ret;
         } else {
             mem_buffer_t *bp = mem_buffers + pte.id;
             if (bp->buf) {
@@ -118,13 +109,9 @@ mem_write(uint32_t address, mem_width_t width, uint32_t value)
 
     if (pte.valid) {
         if (pte.device) {
-            mem_device_t *dp = mem_devices + pte.id;
-            if (dp->size) {
-                uint32_t offset = address - dp->base;
-//                mem_trace(DEV_WRITE, offset, width, value);
-                mem_dev_handler(DEV_WRITE, dp->handle, offset, width, value);
-                return;
-            }
+//            mem_trace(MEM_WRITE, offset, width, value);
+            mem_dev_handler(MEM_WRITE, address, width, value);
+            return;
         } else {
             mem_buffer_t *bp = mem_buffers + pte.id;
             if (bp->buf && bp->writable) {
@@ -162,6 +149,19 @@ mem_range_is_free(uint32_t base, uint32_t size)
     uint32_t limit_page = (base + size) / MEM_PAGE_SIZE;
     for (uint32_t page_index = base_page; page_index < limit_page; page_index++) {
         if (mem_pagetable[page_index].valid) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool
+mem_range_can_be_device(uint32_t base, uint32_t size)
+{
+    uint32_t base_page = base / MEM_PAGE_SIZE;
+    uint32_t limit_page = (base + size) / MEM_PAGE_SIZE;
+    for (uint32_t page_index = base_page; page_index < limit_page; page_index++) {
+        if (mem_pagetable[page_index].valid && !mem_pagetable[page_index].device) {
             return false;
         }
     }
@@ -222,43 +222,25 @@ mem_add_memory(uint32_t base, uint32_t size, bool writable, const void *with_byt
 }
 
 bool
-mem_add_device(uint32_t base, uint32_t size, uint32_t handle)
+mem_add_device(uint32_t base, uint32_t size)
 {
     // must have a device handler
     if (!mem_dev_handler) {
         return false;
     }
 
-    // base & size must be aligned
-    if ((base % MEM_PAGE_SIZE)
-        || (size % MEM_PAGE_SIZE)) {
+    // page-align base & size
+    uint32_t aligned_base = PAGE_ROUND_DOWN(base);
+    uint32_t aligned_limit = PAGE_ROUND_UP(base + size);
+    uint32_t aligned_size = aligned_limit - aligned_base;
+
+    // check that pages are available
+    if (!mem_range_can_be_device(aligned_base, aligned_size)) {
         return false;
     }
-
-    // get a device ID - fail if none available
-    uint8_t device_id;
-    for (device_id = 0; ; device_id++) {
-        if (!mem_buffers[device_id].buf) {
-            break;
-        }
-        if (device_id >= MEM_NUM_IDS) {
-            return false;
-        }
-    }
-
-    // check that pages aren't already in use
-    if (!mem_range_is_free(base, size)) {
-        return false;
-    }
-
-    // allocate device
-    mem_device_t *dp = mem_devices + device_id;
-    dp->base = base;
-    dp->size = size;
-    dp->handle = handle;
 
     // write pagetable
-    mem_set_range(base, size, (pte_t){.valid = 1, .device = 1, .id = device_id});
+    mem_set_range(aligned_base, aligned_size, (pte_t){.valid = 1, .device = 1, .id = ~0});
 
     return true;
 }

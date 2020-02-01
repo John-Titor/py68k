@@ -138,7 +138,7 @@
  * You should put OPT_SPECIFY_HANDLER here if you cant to use it, otherwise it will
  * use a dummy default handler and you'll have to call m68k_set_illg_instr_callback explicitely
  */
-#define M68K_ILLG_HAS_CALLBACK	    OPT_OFF
+#define M68K_ILLG_HAS_CALLBACK	    OPT_ON
 #define M68K_ILLG_CALLBACK(opcode)  op_illg(opcode)
 
 /* If ON, CPU will call the set fc callback on every memory access to
@@ -154,15 +154,15 @@
  * large value.  This allows host programs to be nicer when it comes to
  * fetching immediate data and instructions on a banked memory system.
  */
-#define M68K_MONITOR_PC             OPT_ON
-#define M68K_SET_PC_CALLBACK(A)     your_pc_changed_handler_function(A)
+#define M68K_MONITOR_PC             OPT_SPECIFY_HANDLER
+#define M68K_SET_PC_CALLBACK(A)     {extern void pc_changed_callback(unsigned int); pc_changed_callback(A);}
 
 
 /* If ON, CPU will call the instruction hook callback before every
  * instruction.
  */
-#define M68K_INSTRUCTION_HOOK       OPT_OFF
-#define M68K_INSTRUCTION_CALLBACK(pc) your_instruction_hook_function(pc)
+#define M68K_INSTRUCTION_HOOK       OPT_SPECIFY_HANDLER
+#define M68K_INSTRUCTION_CALLBACK(pc) {extern void instr_hook_callback(unsigned int); instr_hook_callback(pc);}
 
 
 /* If ON, the CPU will emulate the 4-byte prefetch queue of a real 68000 */

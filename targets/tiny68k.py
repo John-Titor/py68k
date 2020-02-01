@@ -17,7 +17,7 @@ def configure(args):
     """create and configure an emulator"""
 
     emu = Emulator(args,
-                   cpu="68000",
+                   cpu='68000',
                    frequency=8 * 1000 * 1000)
     emu.add_memory(base=0, size=(16 * 1024 - 32) * 1024)
     emu.add_device(args,
@@ -29,9 +29,9 @@ def configure(args):
                    address=0xffe000)
 
     if args.eeprom is not None:
-        rom_image = open(args.eeprom, "rb").read(32 * 1024 + 1)
+        rom_image = open(args.eeprom, 'rb').read(32 * 1024 + 1)
         if (len(rom_image) > (32 * 1024)):
-            raise RuntimeError(f"ROM image {args.eeprom} must be <= 32k")
+            raise RuntimeError(f'ROM image {args.eeprom} must be <= 32k')
         print(f'loaded {len(rom_image)} bytes of EEPROM')
         mem_write_bulk(0, rom_image)
 

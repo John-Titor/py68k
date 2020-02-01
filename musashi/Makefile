@@ -12,7 +12,7 @@ CC = gcc
 SO_EXT = so
 endif
 
-SRC = memory.c m68kcpu.c m68kdasm.c softfloat/softfloat.c
+SRC = memory.c callbacks.c m68kcpu.c m68kdasm.c softfloat/softfloat.c
 HDR = memory.h m68k.h m68kcpu.h m68kconf.h
 
 GEN_INPUT = m68k_in.c

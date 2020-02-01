@@ -15,8 +15,8 @@ from musashi.m68k import (
 
     # Memory API
     MEM_PAGE_MASK,
-    DEV_READ,
-    DEV_WRITE,
+    MEM_READ,
+    MEM_WRITE,
     MEM_WIDTH_8,
     MEM_WIDTH_16,
     MEM_WIDTH_32,
@@ -67,7 +67,7 @@ class Device(object):
         parser.add_argument('--debug-device',
                             type=str,
                             default='',
-                            help='comma-separated list of devices to enable debug tracing, \'device\''
+                            help='comma-separated list of devices to enable debug tracing, \'Device\''
                             ' to trace device framework')
 
     def map_registers(self, registers):
@@ -224,6 +224,9 @@ class RootDevice(Device):
                             default=False,
                             help='sends console output to stdout instead of connecting '
                             'to the console server. Disconnects console input.')
+        parser.add_argument('--trace-io',
+                            action='store_true',
+                            help='enable tracing of I/O space accesses')
         # StdoutConsole.add_arguments(parser)
         # SocketConsole.add_arguments(parser)
 
@@ -232,8 +235,7 @@ class RootDevice(Device):
             for dev in Device._devices:
                 vector = dev.get_vector(interrupt)
                 if vector != M68K_IRQ_SPURIOUS:
-                    self.trace('{} returns vector 0x{:x}'.format(
-                        dev._name, vector))
+                    self.trace(f'{dev._name} returns vector {vector:#x}')
                     return vector
             self.trace('no interrupting device')
         except Exception:
@@ -241,8 +243,7 @@ class RootDevice(Device):
 
         return M68K_IRQ_SPURIOUS
 
-    def cb_access(self, operation, handle, offset, width, value):
-        address = handle + offset
+    def cb_access(self, operation, address, width, value):
         try:
             # look for a device
             try:
@@ -253,7 +254,7 @@ class RootDevice(Device):
 
             # dispatch to device emulator
             offset = address - dev._address
-            if operation == DEV_READ:
+            if operation == MEM_READ:
                 value = dev.read(width, offset)
 
                 if self._trace_io:
@@ -266,7 +267,7 @@ class RootDevice(Device):
                         str = f'{label} -> {value:#08x}'
                     Device._emu.trace('DEV_READ', address=address, info=str)
 
-            else:
+            elif operation == MEM_WRITE:
                 if self._trace_io:
                     label = f'{dev._name}:{dev.get_register_name(offset).split("/")[-1]}'
                     if width == Device.WIDTH_8:
@@ -278,6 +279,8 @@ class RootDevice(Device):
                     Device._emu.trace('DEV_WRITE', address=address, info=str)
 
                 dev.write(width, offset, value)
+            else:
+                raise RuntimeError(f'impossible device access {operation}')
 
             self.check_interrupts()
 
@@ -289,11 +292,12 @@ class RootDevice(Device):
     def add_device(self, args, dev, address=None, interrupt=None):
         new_dev = dev(args=args, address=address, interrupt=interrupt)
         if address is not None:
-            if not mem_add_device(address, new_dev.size, new_dev.address):
+            if not mem_add_device(address, new_dev.size):
                 raise RuntimeError(f"could not map device @ 0x{address:x}/{size}")
         Device._devices.append(new_dev)
 
     def tick(self):
+        self.trace('DEV', info='TICK')
         deadline = 100000
         for dev in Device._devices:
             ret = dev.tick()
@@ -321,8 +325,7 @@ class RootDevice(Device):
             SR = get_reg(M68K_REG_SR)
             cpl = (SR >> 8) & 7
             if ipl > cpl:
-                self.trace('{} asserts ipl {}'.format(
-                    interruptingDevice._name, ipl))
+                self.trace(f'{interruptingDevice._name} asserts ipl {ipl}')
         set_irq(ipl)
 
 
@@ -366,123 +369,3 @@ class StdoutConsole(Device):
     def _send(self, output):
         sys.stdout.write(output.decode('ascii'))
         sys.stdout.flush()
-
-
-# XXX these are horribly outdated right now...
-
-
-class uart(Device):
-    """
-    Dumb UART
-    """
-
-    _registers = {
-        'SR': 0x00,
-        'DR': 0x02
-    }
-    SR_RXRDY = 0x01
-    SR_TXRDY = 0x02
-
-    def __init__(self, args, base, interrupt):
-        super(uart, self).__init__(args=args, name='uart',
-                                   address=base, interrupt=interrupt)
-        self.map_registers(self._registers)
-        self.reset()
-
-    def read(self, width, addr):
-        if addr == self._registers['SR']:
-            value = 0
-            if self._rx_ready:
-                value |= SR_RXRDY
-            if self._tx_ready:
-                value |= SR_TXRDY
-        elif addr == self._registers['DR']:
-            value = self._rx_data
-
-        return value
-
-    def write(self, width, addr, value):
-        if addr == self._registers['DR']:
-            self.trace('write', '{}'.format(chr(value).__repr__()))
-            sys.stdout.write(chr(value))
-            sys.stdout.flush()
-
-    def tick(self):
-        # emulate tx drain, get rx data from stdin?
-        return 0
-
-    def reset(self):
-        self._rx_ready = False
-        self._tx_ready = True
-        self._rx_data = 0
-
-    def get_vector(self, interrupt):
-        if interrupt == self._interrupt:
-            return M68K_IRQ_AUTOVECTOR
-        return M68K_IRQ_SPURIOUS
-
-
-class timer(Device):
-    """
-    A simple down-counting timer
-    """
-
-    _registers = {
-        'RELOAD': 0x00,
-        'COUNT': 0x04
-    }
-
-    def __init__(self, args, base, interrupt):
-        super(timer, self).__init__(args=args, name='timer',
-                                    address=base, interrupt=interrupt)
-        self.map_registers(self._registers)
-        self.reset()
-
-    def read(self, width, addr):
-        if addr == self._registers['RELOAD']:
-            value = self._reload
-        if addr == self._registers['COUNT']:
-            # force a tick to make sure we have caught up with time
-            self.tick(Device._emu.current_time)
-            value = self._count
-        return value
-
-    def write(self, width, addr, value):
-        if addr == self._registers['RELOAD']:
-            self.trace('set reload', '{}'.format(value))
-            self._reload = value
-            self._count = self._reload
-            self._last_update = Device._emu.current_time
-
-    def tick(self):
-        # do nothing if we are disabled
-        if self._reload == 0:
-            return 0
-
-        # how much time has elapsed?
-        current_time = self.current_time
-        delta = (current_time - self._last_update) % self._reload
-        self._last_update = current_time
-
-        if self._count >= delta:
-            # we are still counting towards zero
-            self._count -= delta
-        else:
-            # we have wrapped, do reload & interrupt
-            self.trace('tick', '')
-            delta -= self._count
-            self._count = self._reload - delta
-            set_irq(self._interrupt)
-
-        # send back a hint as to when we should be called again for best results
-        return self._count
-
-    def reset(self):
-        self._reload = 0
-        self._count = 0
-        self._last_update = 0
-
-    def get_vector(self, interrupt):
-        if interrupt == self._interrupt:
-            return M68K_IRQ_AUTOVECTOR
-        return M68K_IRQ_SPURIOUS

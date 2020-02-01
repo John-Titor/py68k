@@ -5,10 +5,6 @@ import os
 import subprocess
 from bisect import bisect
 
-from musashi.m68k import (
-    mem_write_bulk
-)
-
 # note - package is 'pyelftools'
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
@@ -18,35 +14,23 @@ from elftools.elf.descriptions import (
     describe_e_machine,
     describe_e_type
 )
+from elftools.dwarf.descriptions import describe_form_class
 
 
-class image(object):
+class ELFImage(object):
     """
     Program image in the emulator
     """
 
-    def __init__(self, emu, image_filename):
+    def __init__(self, image_filename):
         """
-        Read the ELF headers and prepare to load the executable
+        Read the ELF headers and parse the executable
         """
-
-        self._emu = emu
-        self._lineinfo_cache = dict()
+        self._address_info_cache = dict()
         self._symbol_cache = dict()
         self._address_cache = dict()
-        self._addr2line = self._findtool('addr2line')
-        self._text_base = 0
-        self._text_end = 0
-        self._low_sym = 0xffffffff
-        self._high_sym = 0
-        self._image_filename = image_filename
-
-        if self._addr2line is None:
-            raise RuntimeError(
-                "unable to find m68k addr2line, check your PATH")
-
-        elf_fd = open(self._image_filename, "rb")
-        self._elf = ELFFile(elf_fd)
+        self._elf = ELFFile(open(image_filename, "rb"))
+        self._name = os.path.basename(image_filename)
 
         if self._elf.header['e_type'] != 'ET_EXEC':
             raise RuntimeError('not an ELF executable file')
@@ -55,37 +39,66 @@ class image(object):
         if self._elf.num_segments() == 0:
             raise RuntimeError('no segments in ELF file')
 
+        if not self._elf.has_dwarf_info():
+            raise RuntimeError('no DWARF info in ELF file')
+        self._dwarf = self._elf.get_dwarf_info()
+
         # iterate sections
         for section in self._elf.iter_sections():
-
-            # does this section need to be loaded?
-            if section['sh_flags'] & SH_FLAGS.SHF_ALLOC:
-                p_vaddr = section['sh_addr']
-                p_paddr = p_vaddr
-                p_size = section['sh_size']
-
-                # load address may not equal run address, but the section
-                # doesn't know that
-                for segment in self._elf.iter_segments():
-                    if segment.section_in_segment(section):
-                        if segment['p_paddr'] != 0:
-                            p_paddr -= segment['p_vaddr'] - segment['p_paddr']
-                            break
-
-                self._emu.log(f'{section.name} 0x{p_vaddr:x}/{p_size} @ 0x{p_paddr:x}')
-
-                # XXX should really be a call on the emulator
-                mem_write_bulk(p_paddr, section.data())
-
-                if section.name == '.text':
-                    self._text_base = p_paddr
-                    self._text_end = p_paddr + p_size
 
             # does it contain symbols?
             if isinstance(section, SymbolTableSection):
                 self._cache_symbols(section)
 
         self._symbol_index = sorted(self._symbol_cache.keys())
+
+    def _get_loadable_sections(self):
+        loadable_sections = dict()
+        for section in self._elf.iter_sections():
+            if section['sh_flags'] & SH_FLAGS.SHF_ALLOC:
+                loadable_sections[section['sh_addr']] = bytearray(section.data())
+        return loadable_sections
+
+    def relocate(self, offset):
+        # find sections that we want to load
+        loadable_sections = self._get_loadable_sections()
+
+        # iterate relocation sections
+        for section in self._elf.iter_sections():
+            if not isinstance(section, RelocationSection):
+                continue
+
+            # do these relocates affect a loaded section?
+            reloc_section = self._elf.get_section(section['sh_info'])
+            if not (reloc_section['sh_flags'] & SH_FLAGS.SHF_ALLOC):
+                continue
+
+            # iterate relocations
+            for reloc in section.iter_relocations():
+                if not reloc.is_RELA():
+                    raise RuntimeError('unexpected REL reloc')
+
+                # Only R_68K_32 relocations are of interest
+                if reloc['r_info_type'] != R_68K_32:
+                    continue
+
+                reloc_address = reloc['r_offset']
+                rel_value = offset + reloc['r_addend']
+
+                for sec_base, sec_data in loadable_sections.items():
+                    sec_offset = reloc_address - sec_base
+                    if (sec_base <= reloc_address) and (sec_offset < len(sec_data)):
+                        sec_data[sec_offset + 0] = rel_value >> 24
+                        sec_data[sec_offset + 1] = rel_value >> 16
+                        sec_data[sec_offset + 2] = rel_value >> 8
+                        sec_data[sec_offset + 3] = rel_value >> 0
+                        break
+
+        relocated_sections = dict()
+        for sec_base, sec_data in loadable_sections.items():
+            relocated_sections[sec_base + offset] = sec_data
+
+        return (self._elf.header['e_entry'] + offset, relocated_sections)
 
     def _cache_symbols(self, section):
 
@@ -100,73 +113,10 @@ class image(object):
             s_size = symbol['st_size']
             s_name = str(symbol.name)
 
-            self._low_sym = min(s_addr, self._low_sym)
-            self._high_sym = max(s_addr + s_size, self._high_sym)
-
             self._symbol_cache[s_addr] = {'name': s_name, 'size': s_size}
             self._address_cache[s_name] = s_addr
 
-    def _findtool(self, tool):
-        for prefix in ['m68k-elf-', 'm68k-unknown-elf-']:
-            for path in os.environ['PATH'].split(os.pathsep):
-                path = path.strip('"')
-                candidate = os.path.join(path, prefix + tool)
-                if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-                    return candidate
-                else:
-                    print(f"no {candidate}")
-        return None
-
-    def lineinfo(self, addr):
-        try:
-            return self._lineinfo_cache[addr]
-
-        except KeyError:
-
-            # -i gives extra information about inlined functions, but it puts
-            # newlines in the result that mess up the log...
-
-            symb = subprocess.Popen([self._addr2line,
-                                     '-pfC',
-                                     '-e',
-                                     self._image_filename,
-                                     '{:#x}'.format(addr)],
-                                    stdout=subprocess.PIPE)
-            output, err = symb.communicate()
-
-            result = output.decode('ascii')
-            self._lineinfo_cache[addr] = result
-            return result
-
-    def symname(self, addr):
-        if addr < self._low_sym or addr >= self._high_sym:
-            return ''
-
-        try:
-            return self._symbol_cache[addr]['name']
-
-        except KeyError:
-            # look for the next highest symbol address
-            pos = bisect(self._symbol_index, addr)
-            if pos == 0:
-                # address lower than anything we know
-                return ''
-            insym = self._symbol_index[pos - 1]
-
-            # check that the value is within the symbol
-            delta = addr - insym
-            if self._symbol_cache[insym]['size'] <= delta:
-                return ''
-
-            # it is, construct a name + offset string
-            name = '{}+{:#x}'.format(self._symbol_cache[insym]['name'], delta)
-
-            # add it to the symbol cache
-            self._symbol_cache[addr] = {'name': name, 'size': 1}
-
-            return name
-
-    def symrange(self, name):
+    def get_symbol_range(self, name):
         try:
             addr = self._address_cache[name]
             size = self._symbol_cache[addr]['size']
@@ -180,7 +130,69 @@ class image(object):
 
         return range(addr, addr + size)
 
-    def check_text(self, addr):
-        if addr < self._text_base or addr >= self._text_end:
-            return False
-        return True
+    def get_address_info(self, address):
+        # return a triple of file, line, function for a given address
+        try:
+            return self._address_info_cache[address]
+        except KeyError:
+            function = self._function_for_address(address)
+            filename, line = self._fileinfo_for_address(address)
+            self._address_info_cache[address] = (filename, line, function)
+            return (filename, line, function)
+
+    def _function_for_address(self, address):
+        # Go over all DIEs in the DWARF information, looking for a subprogram
+        # entry with an address range that includes the given address. Note that
+        # this simplifies things by disregarding subprograms that may have
+        # split address ranges.
+        for CU in self._dwarf.iter_CUs():
+            for DIE in CU.iter_DIEs():
+                try:
+                    if DIE.tag == 'DW_TAG_subprogram':
+                        lowpc = DIE.attributes['DW_AT_low_pc'].value
+
+                        # DWARF v4 in section 2.17 describes how to interpret the
+                        # DW_AT_high_pc attribute based on the class of its form.
+                        # For class 'address' it's taken as an absolute address
+                        # (similarly to DW_AT_low_pc); for class 'constant', it's
+                        # an offset from DW_AT_low_pc.
+                        highpc_attr = DIE.attributes['DW_AT_high_pc']
+                        highpc_attr_class = describe_form_class(highpc_attr.form)
+                        if highpc_attr_class == 'address':
+                            highpc = highpc_attr.value
+                        elif highpc_attr_class == 'constant':
+                            highpc = lowpc + highpc_attr.value
+                        else:
+                            print('Error: invalid DW_AT_high_pc class:',
+                                  highpc_attr_class)
+                            continue
+
+                        if lowpc <= address <= highpc:
+                            return DIE.attributes['DW_AT_name'].value
+                except KeyError:
+                    continue
+        return None
+
+    def _fileinfo_for_address(self, address):
+        # Go over all the line programs in the DWARF information, looking for
+        # one that describes the given address.
+        for CU in self._dwarf.iter_CUs():
+            # First, look at line programs to find the file/line for the address
+            lineprog = self._dwarf.line_program_for_CU(CU)
+            prevstate = None
+            for entry in lineprog.get_entries():
+                # We're interested in those entries where a new state is assigned
+                if entry.state is None:
+                    continue
+                if entry.state.end_sequence:
+                    # if the line number sequence ends, clear prevstate.
+                    prevstate = None
+                    continue
+                # Looking for a range of addresses in two consecutive states that
+                # contain the required address.
+                if prevstate and prevstate.address <= address < entry.state.address:
+                    filename = lineprog['file_entry'][prevstate.file - 1].name
+                    line = prevstate.line
+                    return filename, line
+                prevstate = entry.state
+        return None, None
