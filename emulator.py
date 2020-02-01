@@ -81,6 +81,7 @@ from musashi.m68k import (
     mem_enable_bus_error,
     mem_read_memory,
     mem_write_memory,
+    mem_write_bulk,
 )
 
 
@@ -144,11 +145,10 @@ class Emulator(object):
         self._trace_memory = False
         self._trace_instructions = False
         self._trace_jumps = False
-        self._trace_cycle_limit = 0
-        self._check_PC_in_text = False
 
-        self._trace_exception_list = list()
-        self._trace_jump_cache = dict()
+        # files and symbolication
+        self._load_image = None
+        self._symbol_files = list()
 
         # 'native features' stderr channel buffer
         self._message_buffer = ''
@@ -192,19 +192,11 @@ class Emulator(object):
 
         # load an executable?
         if args.load is not None:
-            load_image = ELFImage(args.load)
-            self._symbol_files += load_image
-
-            # relocate to the load address & write to memory
-            entrypoint, sections = load_image.relocate(args.load_address)
-            for section_address, section_data in sections().items():
-                mem_write_bulk(section_address, section_data)
-
-            # patch the reset vector
-            mem_write_memory(0x4, MEM_WIDTH_32, entrypoint)
+            self._load_image = ELFImage(args.load)
+            self._symbol_files.append(self._load_image)
+            self._load_address = args.load_address
 
         # add symbol files
-        self._symbol_files = list()
         if args.symbols is not None:
             for symfile in args.symbols:
                 self._symbol_files.append(ELFImage(symfile))
@@ -270,6 +262,18 @@ class Emulator(object):
         return image
 
     def run(self):
+        if self._load_image is not None:
+            # relocate to the load address & write to memory
+            sections = self._load_image.relocate(self._load_address)
+            for section_address, section_data in sections.items():
+                mem_write_bulk(section_address, section_data)
+
+            # patch the initial stack and entrypoint
+            _, stack_limit = self._load_image.get_symbol_range('__STACK__')
+            if stack_limit is not None:
+                mem_write_memory(0x0, MEM_WIDTH_32, stack_limit)
+            mem_write_memory(0x4, MEM_WIDTH_32, self._load_image.entrypoint)
+
         signal.signal(signal.SIGINT, self._keyboard_interrupt)
         print('\nHit ^C to exit\n')
 
@@ -282,7 +286,6 @@ class Emulator(object):
         self._start_time = time.time()
         while not self._dead:
             cycles_to_run = self._root_device.tick()
-            self.trace('START', info=f'{cycles_to_run}')
             if (cycles_to_run == 0) or (cycles_to_run > self._quantum):
                 cycles_to_run = self._quantum
             self._elapsed_cycles += execute(cycles_to_run)
@@ -364,7 +367,6 @@ class Emulator(object):
             set_pc_changed_callback(self.cb_trace_jump)
 
         elif what == 'exceptions':
-            self._trace_exception_list.extend(range(1, 255))
             set_pc_changed_callback(self.cb_trace_jump)
 
         else:
@@ -393,9 +395,9 @@ class Emulator(object):
 
     def _sym_for_address(self, address):
         for symfile in self._symbol_files:
-            _, _, function = symfile.get_address_info(address)
-            if function is not None:
-                return function
+            name = symfile.get_symbol_name(address)
+            if name is not None:
+                return name
         return None
 
     def cb_trace_memory(self, operation, addr, width, value):

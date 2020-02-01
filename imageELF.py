@@ -3,18 +3,16 @@
 #
 import os
 import subprocess
-from bisect import bisect
+import struct
+from bisect import bisect_left
 
 # note - package is 'pyelftools'
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
-from elftools.elf.enums import ENUM_P_TYPE_BASE
+from elftools.elf.relocation import RelocationSection
 from elftools.elf.constants import SH_FLAGS
-from elftools.elf.descriptions import (
-    describe_e_machine,
-    describe_e_type
-)
-from elftools.dwarf.descriptions import describe_form_class
+
+R_68K_32 = 0x01
 
 
 class ELFImage(object):
@@ -26,12 +24,14 @@ class ELFImage(object):
         """
         Read the ELF headers and parse the executable
         """
-        self._address_info_cache = dict()
-        self._symbol_cache = dict()
-        self._address_cache = dict()
-        self._elf = ELFFile(open(image_filename, "rb"))
         self._name = os.path.basename(image_filename)
 
+        self._name_cache = dict()       # names are unique, entries are subdicts with 'address' and 'size'
+        self._address_cache = dict()    # addresses are not unique, entries are lists of names at that address
+        self._symbol_index = None       # sorted list of unique symbol addresses + sentinel
+        self._relocation = 0
+
+        self._elf = ELFFile(open(image_filename, "rb"))
         if self._elf.header['e_type'] != 'ET_EXEC':
             raise RuntimeError('not an ELF executable file')
         if self._elf.header['e_machine'] != 'EM_68K':
@@ -39,18 +39,36 @@ class ELFImage(object):
         if self._elf.num_segments() == 0:
             raise RuntimeError('no segments in ELF file')
 
-        if not self._elf.has_dwarf_info():
-            raise RuntimeError('no DWARF info in ELF file')
-        self._dwarf = self._elf.get_dwarf_info()
-
-        # iterate sections
+        # build the symbol cache
         for section in self._elf.iter_sections():
-
-            # does it contain symbols?
             if isinstance(section, SymbolTableSection):
                 self._cache_symbols(section)
 
-        self._symbol_index = sorted(self._symbol_cache.keys())
+        # look for a stack
+        stack_size = None
+        for segment in self._elf.iter_segments():
+            if segment['p_type'] == 'PT_GNU_STACK':
+                stack_size = segment['p_memsz']
+        if stack_size is None:
+            print(f'WARNING: no stack defined in {image_filename}')
+        else:
+            try:
+                stack_base = self._name_cache['_end']['address']
+            except KeyError:
+                raise RuntimeError('no _end symbol, cannot locate stack')
+            self._add_symbol('__STACK__', stack_base, stack_size)
+
+        # sort symbol addresses to make index
+        self._symbol_index = sorted(self._address_cache.keys())
+        if len(self._symbol_index) == 0:
+            raise RuntimeError(f'no symbols in {image_filename}')
+
+    def _add_symbol(self, name, address, size):
+        self._name_cache[name] = {'address': address, 'size': size}
+        try:
+            self._address_cache[address].append(name)
+        except KeyError:
+            self._address_cache[address] = [name]
 
     def _get_loadable_sections(self):
         loadable_sections = dict()
@@ -59,7 +77,7 @@ class ELFImage(object):
                 loadable_sections[section['sh_addr']] = bytearray(section.data())
         return loadable_sections
 
-    def relocate(self, offset):
+    def relocate(self, relocation):
         # find sections that we want to load
         loadable_sections = self._get_loadable_sections()
 
@@ -83,116 +101,78 @@ class ELFImage(object):
                     continue
 
                 reloc_address = reloc['r_offset']
-                rel_value = offset + reloc['r_addend']
 
                 for sec_base, sec_data in loadable_sections.items():
                     sec_offset = reloc_address - sec_base
                     if (sec_base <= reloc_address) and (sec_offset < len(sec_data)):
-                        sec_data[sec_offset + 0] = rel_value >> 24
-                        sec_data[sec_offset + 1] = rel_value >> 16
-                        sec_data[sec_offset + 2] = rel_value >> 8
-                        sec_data[sec_offset + 3] = rel_value >> 0
+                        unrelocated_value = struct.unpack_from('>L', sec_data, sec_offset)[0]
+                        struct.pack_into('>L', sec_data, sec_offset, unrelocated_value + relocation)
                         break
 
         relocated_sections = dict()
         for sec_base, sec_data in loadable_sections.items():
-            relocated_sections[sec_base + offset] = sec_data
+            relocated_sections[sec_base + relocation] = sec_data
 
-        return (self._elf.header['e_entry'] + offset, relocated_sections)
+        self._relocation = relocation
+        return relocated_sections
+
+    @property
+    def entrypoint(self):
+        return self._elf.header['e_entry'] + self._relocation
+
+    @property
+    def initstack(self):
+        if self._stack_size is not None:
+            end, _ = self.get_symbol_range('_end')
+            return end + self._relocation + self._stack_size
 
     def _cache_symbols(self, section):
 
         for nsym, symbol in enumerate(section.iter_symbols()):
 
-            # only interested in data and function symbols
-            s_type = symbol['st_info']['type']
-            if s_type != 'STT_OBJECT' and s_type != 'STT_FUNC':
+            s_name = str(symbol.name)
+            if len(s_name) == 0:
                 continue
-
+            s_type = symbol['st_info']['type']
+            if s_type == 'STT_FILE':
+                continue
             s_addr = symbol['st_value']
             s_size = symbol['st_size']
-            s_name = str(symbol.name)
 
-            self._symbol_cache[s_addr] = {'name': s_name, 'size': s_size}
-            self._address_cache[s_name] = s_addr
+            self._name_cache[s_name] = {'address': s_addr, 'size': s_size}
+            try:
+                self._address_cache[s_addr].append(s_name)
+            except KeyError:
+                self._address_cache[s_addr] = [s_name]
 
     def get_symbol_range(self, name):
         try:
-            addr = self._address_cache[name]
-            size = self._symbol_cache[addr]['size']
+            addr = self._name_cache[name]['address'] + self._relocation
+            size = self._name_cache[name]['size']
         except KeyError:
             try:
                 addr = int(name)
                 size = 1
             except Exception:
-                raise RuntimeError(
-                    'can\'t find a symbol called {} and can\'t convert it to an address'.format(name))
+                raise RuntimeError(f'no symbol {name}'.format(name))
 
-        return range(addr, addr + size)
+        return addr, size + addr
 
-    def get_address_info(self, address):
-        # return a triple of file, line, function for a given address
-        try:
-            return self._address_info_cache[address]
-        except KeyError:
-            function = self._function_for_address(address)
-            filename, line = self._fileinfo_for_address(address)
-            self._address_info_cache[address] = (filename, line, function)
-            return (filename, line, function)
-
-    def _function_for_address(self, address):
-        # Go over all DIEs in the DWARF information, looking for a subprogram
-        # entry with an address range that includes the given address. Note that
-        # this simplifies things by disregarding subprograms that may have
-        # split address ranges.
-        for CU in self._dwarf.iter_CUs():
-            for DIE in CU.iter_DIEs():
-                try:
-                    if DIE.tag == 'DW_TAG_subprogram':
-                        lowpc = DIE.attributes['DW_AT_low_pc'].value
-
-                        # DWARF v4 in section 2.17 describes how to interpret the
-                        # DW_AT_high_pc attribute based on the class of its form.
-                        # For class 'address' it's taken as an absolute address
-                        # (similarly to DW_AT_low_pc); for class 'constant', it's
-                        # an offset from DW_AT_low_pc.
-                        highpc_attr = DIE.attributes['DW_AT_high_pc']
-                        highpc_attr_class = describe_form_class(highpc_attr.form)
-                        if highpc_attr_class == 'address':
-                            highpc = highpc_attr.value
-                        elif highpc_attr_class == 'constant':
-                            highpc = lowpc + highpc_attr.value
-                        else:
-                            print('Error: invalid DW_AT_high_pc class:',
-                                  highpc_attr_class)
-                            continue
-
-                        if lowpc <= address <= highpc:
-                            return DIE.attributes['DW_AT_name'].value
-                except KeyError:
-                    continue
+    def get_symbol_name(self, address):
+        address -= self._relocation
+        if address in self._address_cache:
+            return ','.join(self._address_cache[address])
+        index = bisect_left(self._symbol_index, address)
+        if not index:
+            return None
+        symbol_address = self._symbol_index[index - 1]
+        if address < symbol_address:
+            return None
+        names = list()
+        for name in self._address_cache[symbol_address]:
+            if (address - symbol_address) < self._name_cache[name]['size']:
+                names.append(name)
+        if len(names) > 0:
+            label = ','.join(names) + f'+{address - symbol_address:#x}'
+            return label
         return None
-
-    def _fileinfo_for_address(self, address):
-        # Go over all the line programs in the DWARF information, looking for
-        # one that describes the given address.
-        for CU in self._dwarf.iter_CUs():
-            # First, look at line programs to find the file/line for the address
-            lineprog = self._dwarf.line_program_for_CU(CU)
-            prevstate = None
-            for entry in lineprog.get_entries():
-                # We're interested in those entries where a new state is assigned
-                if entry.state is None:
-                    continue
-                if entry.state.end_sequence:
-                    # if the line number sequence ends, clear prevstate.
-                    prevstate = None
-                    continue
-                # Looking for a range of addresses in two consecutive states that
-                # contain the required address.
-                if prevstate and prevstate.address <= address < entry.state.address:
-                    filename = lineprog['file_entry'][prevstate.file - 1].name
-                    line = prevstate.line
-                    return filename, line
-                prevstate = entry.state
-        return None, None
