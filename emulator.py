@@ -71,9 +71,13 @@ from musashi.m68k import (
     MEM_WRITE,
     INVALID_READ,
     INVALID_WRITE,
+    MEM_MAP,
     MEM_WIDTH_8,
     MEM_WIDTH_16,
     MEM_WIDTH_32,
+    MEM_MAP_ROM,
+    MEM_MAP_RAM,
+    MEM_MAP_DEVICE,
 
     mem_add_memory,
     mem_set_trace_handler,
@@ -128,7 +132,8 @@ class Emulator(object):
         MEM_READ: 'READ',
         MEM_WRITE: 'WRITE',
         INVALID_READ: 'BAD_READ',
-        INVALID_WRITE: 'BAD_WRITE'
+        INVALID_WRITE: 'BAD_WRITE',
+        MEM_MAP: 'MAP'
     }
 
     def __init__(self, args, cpu="68000", frequency=8000000):
@@ -400,20 +405,30 @@ class Emulator(object):
                 return name
         return None
 
-    def cb_trace_memory(self, operation, addr, width, value):
+    def cb_trace_memory(self, operation, addr, size, value):
         """
         Cut a memory trace entry
         """
         try:
             action = self.operation_map[operation]
-            if width == MEM_WIDTH_8:
-                info = f'{value:#04x}'
-            elif width == MEM_WIDTH_16:
-                info = f'{value:#06x}'
-            elif width == MEM_WIDTH_32:
-                info = f'{value:#010x}'
+            if operation == MEM_MAP:
+                if value == MEM_MAP_RAM:
+                    info = f'RAM {size:#x}'
+                elif value == MEM_MAP_ROM:
+                    info = f'ROM {size:#x}'
+                elif value == MEM_MAP_DEVICE:
+                    info = f'DEVICE {size:#x}'
+                else:
+                    raise RuntimeError(f'unexpected mapping type {value}')
             else:
-                info = f'UNEXPECTED OPERATION WIDTH'
+                if size == MEM_WIDTH_8:
+                    info = f'{value:#04x}'
+                elif size == MEM_WIDTH_16:
+                    info = f'{value:#06x}'
+                elif size == MEM_WIDTH_32:
+                    info = f'{value:#010x}'
+                else:
+                    raise RuntimeError(f'unexpected trace size {size}')
 
             self.trace(action, addr, info)
 

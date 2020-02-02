@@ -21,7 +21,7 @@ M68K_CPU_TYPE_68030 = 6
 M68K_CPU_TYPE_68EC040 = 7
 M68K_CPU_TYPE_68LC040 = 8
 M68K_CPU_TYPE_68040 = 9
-M68K_CPU_TYPE_SCC68070 = 0
+M68K_CPU_TYPE_SCC68070 = 10
 
 
 # registers
@@ -78,9 +78,13 @@ MEM_READ = ord('R')
 MEM_WRITE = ord('W')
 INVALID_READ = ord('r')
 INVALID_WRITE = ord('w')
+MEM_MAP = ord('M')
 MEM_WIDTH_8 = 0
 MEM_WIDTH_16 = 1
 MEM_WIDTH_32 = 2
+MEM_MAP_ROM = 0
+MEM_MAP_RAM = 1
+MEM_MAP_DEVICE = 2
 
 
 def find_lib():
@@ -259,8 +263,8 @@ unsigned int m68k_disassemble_raw(char* str_buff, unsigned int pc, const unsigne
 lib.mem_add_memory.restype = c_bool
 lib.mem_add_device.restype = c_bool
 lib.mem_read_memory.restype = c_uint
-device_handler_func_type = CFUNCTYPE(c_uint, c_int, c_uint, c_ubyte, c_uint)
-trace_handler_func_type = CFUNCTYPE(None, c_int, c_uint, c_ubyte, c_uint)
+device_handler_func_type = CFUNCTYPE(c_uint, c_uint, c_uint, c_uint, c_uint)
+trace_handler_func_type = CFUNCTYPE(None, c_uint, c_uint, c_uint, c_uint)
 
 
 def mem_add_memory(base, size, writable=True, with_bytes=None):
@@ -295,12 +299,12 @@ def mem_enable_bus_error(enable=True):
     lib.mem_enable_bus_error(c_bool(enable))
 
 
-def mem_read_memory(address, width):
-    return lib.mem_read_memory(c_uint(address), c_ubyte(width))
+def mem_read_memory(address, size):
+    return lib.mem_read_memory(c_uint(address), c_uint(size))
 
 
-def mem_write_memory(address, width, value):
-    lib.mem_write_memory(c_uint(address), c_ubyte(width), c_uint(value))
+def mem_write_memory(address, size, value):
+    lib.mem_write_memory(c_uint(address), c_uint(size), c_uint(value))
 
 
 def mem_write_bulk(address, buffer):
