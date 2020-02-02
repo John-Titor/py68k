@@ -1,16 +1,17 @@
 Things to investigate / fix:
   ✔ fix disassembly printing as bytes object (b'...') @done (20-01-11 09:14)
-  ☐ tabs don't print correctly
+  ✘ tabs don't print correctly @cancelled (20-02-01 10:12)
   ✔ add reset hook & pass reset to peripherals @done (20-01-28 15:54)
   ✘ look at pyglet to handle console @cancelled (20-01-28 15:55)
   ✘ emulator.cb_buserror <- do something useful here @cancelled (20-01-31 09:34)
   ✘ use device mapping handle to find devices faster? (limitation of 1 device per page regardless...) @cancelled (20-01-31 09:34)
   ☐ fix console in/output paths to be bytes all the way through
-  ☐ fix disassembly
-  ☐ fix symbolication
-  ☐ fix tracing triggers
+  ✔ fix disassembly @done (20-02-01 10:12)
+  ✔ fix symbolication @done (20-02-01 10:12)
+  ✘ fix tracing triggers @cancelled (20-02-01 10:12)
   ☐ 68681 timer interrupts are broken, counter mode is broken
   ✔ need to allow devices on arbitrary address boundaries; 4K is too coarse @done (20-01-31 09:34)
+  ☐ --debug-device doesn't seem to work with a device and 'device'
   
 Features:
   ✔ need new memory model, support multiple disjoint memories (RAM, ROM), > 16MiB @done (20-01-28 15:54)

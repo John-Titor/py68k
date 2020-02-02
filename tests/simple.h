@@ -2,17 +2,9 @@
  * Register definitions for the Simple emulator model
  */
 
-#include <stdint.h>
+#include "m68k_misc.h"
 
-#define REG8(_x)            (*(volatile uint8_t *)(_x))
-#define REG16(_x)           (*(volatile uint16_t *)(_x))
-#define REG32(_x)           (*(volatile uint32_t *)(_x))
-
-#if defined(__mc68010) || defined(__mc68020) || defined(__mc68030) || defined(__mc68040)
-# define IO_BASE    0xffff0000
-#else
-# define IO_BASE    0x00ff0000
-#endif
+#define IO_BASE    0x00ff0000
 
 #define UART_BASE   (IO_BASE)
 #define TIMER_BASE  (IO_BASE + 0x1000)

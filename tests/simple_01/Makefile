@@ -1,7 +1,9 @@
 CC		 = m68k-unknown-elf-gcc
 PROG		 = hello
+
+ELF		 = $(PROG).elf
 SRCS		 = $(wildcard *.c)
-CFLAGS		 = -m68000 \
+CFLAGS		 = -m68010 \
 		   -std=gnu17 \
 		   -Wall \
 		   -Wextra \
@@ -18,9 +20,9 @@ CFLAGS		 = -m68000 \
 		   -Wl,--section-start=.text=0 \
 		   -e main
 
-$(PROG): $(SRCS) $(MAKEFILE_LIST)
+$(ELF): $(SRCS) $(MAKEFILE_LIST)
 	$(CC) -o $@ $(CFLAGS) $(SRCS)
 
 .PHONY: clean
 clean:
-	rm -f $(PROG)
+	rm -f $(ELF)

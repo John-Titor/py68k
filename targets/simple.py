@@ -3,7 +3,7 @@ from devices.simple import UART, Timer
 
 
 def add_arguments(parser):
-    parser.add_argument('--cpu_type',
+    parser.add_argument('--cpu-type',
                         type=str,
                         choices=['68000',
                                  '68010',
@@ -35,12 +35,7 @@ def add_arguments(parser):
 
 
 def configure(args):
-    if args.cpu_type == '68000':
-        if args.mem_size > 15:
-            raise RuntimeError('max memory for 68000 emulation is 15MB')
-        iobase = 0xff0000
-    else:
-        iobase = 0xffff0000
+    iobase = 0xff0000
 
     emu = Emulator(args,
                    cpu=args.cpu_type,
