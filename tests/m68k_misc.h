@@ -32,7 +32,7 @@ typedef void    (*exception_handler_t)(void);
 #define VEC_FORMAT_ERROR    VECTOR(14)          // Format error
 #define VEC_UNINITIALIZED   VECTOR(15)          // Uninitialized interrupt vector
 #define VEC_SPURIOUS        VECTOR(24)          // Spurious interrupt
-#define VEC_AUTOVECTOR(_y)  VECTOR(25 + (_y))   // Level 1 on-chip interrupt autovec
+#define VEC_AUTOVECTOR(_y)  VECTOR(24 + (_y))   // Level 1 on-chip interrupt autovec
 #define VEC_TRAP(_y)        VECTOR(32 + (_y))   // TRAP instruction vectors
 #define VEC_USER(_y)        VECTOR(64 + (_y))   // User interrupt vectors
 
@@ -46,6 +46,31 @@ zero_bss()
     while (ptr < &_end) {
         *ptr++ = 0;
     }
+}
+
+#define set_sr(a)                         		\
+    __extension__                             	\
+    ({short _r, _a = (a);                     	\
+        __asm__ volatile                        \
+        ("move.w %%sr,%0\n\t"                   \
+         "move.w %1,%%sr"                       \
+         : "=&d"(_r)        /* outputs */       \
+         : "nd"(_a)         /* inputs  */       \
+         : "cc", "memory"   /* clobbered */     \
+        );                                      \
+        _r;                                     \
+    })
+
+static inline void
+disable_interrupts()
+{
+	set_sr(0x2700);
+}
+
+static inline void
+enable_interrupts()
+{
+	set_sr(0x2000);
 }
 
 extern bool _detect_native_features(void);
