@@ -65,10 +65,10 @@ class Device(object):
     def add_arguments(cls, parser):
         """Common arguments applying to all devices"""
         parser.add_argument('--debug-device',
-                            type=str,
-                            default='',
-                            help='comma-separated list of devices to enable debug tracing, \'Device\''
-                            ' to trace device framework')
+                            action='append',
+                            metavar='DEVICE-NAME',
+                            help='enable debugging for DEVICE-NAME, \'Device\''
+                            ' to trace device framework.')
 
     def map_registers(self, registers):
         """

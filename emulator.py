@@ -499,15 +499,12 @@ class Emulator(object):
             return self.ILLG_ERROR
 
         if id == 'NF_VERSION':
-            self.trace('NF_VERSION')
             set_reg(M68K_REG_D0, 1)
         # elif id == 'NF_NAME':
         #    set_reg(M68K_REG_D0, 1)
         elif id == 'NF_STDERR':
-            self.trace('NF_STDERR')
             set_reg(M68K_REG_D0, 2)
         elif id == 'NF_SHUTDOWN':
-            self.trace('NF_SHUTDOWN')
             set_reg(M68K_REG_D0, 3)
         else:
             return self.ILLG_ERROR
@@ -541,7 +538,6 @@ class Emulator(object):
         result = str()
         while True:
             c = mem_read_memory(strptr, MEM_WIDTH_8)
-            self.trace('GETSTR', strptr, f'{c}')
             if c == 0xffffffff:
                 return None
             if (c == 0) or (len(result) > 255):

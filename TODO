@@ -9,9 +9,9 @@ Things to investigate / fix:
   ✔ fix disassembly @done (20-02-01 10:12)
   ✔ fix symbolication @done (20-02-01 10:12)
   ✘ fix tracing triggers @cancelled (20-02-01 10:12)
-  ☐ 68681 timer interrupts are broken, counter mode is broken
+  ☐ interrupts are broken
   ✔ need to allow devices on arbitrary address boundaries; 4K is too coarse @done (20-01-31 09:34)
-  ☐ --debug-device doesn't seem to work with a device and 'device'
+  ✔ --debug-device doesn't seem to work with a device and 'device' @done (20-02-02 23:00)
   ✔ suppress read traces for instruction fetches @done (20-02-02 18:24)
   
 Features:
