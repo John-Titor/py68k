@@ -18,6 +18,7 @@ CFLAGS		 = -m68010 \
 		   -Wl,--emit-relocs \
 		   -Wl,-z,stack-size=1024 \
 		   -Wl,--section-start=.text=0 \
+		   -MD \
 		   -e main
 
 $(ELF): $(SRCS) $(MAKEFILE_LIST)
@@ -26,3 +27,5 @@ $(ELF): $(SRCS) $(MAKEFILE_LIST)
 .PHONY: clean
 clean:
 	rm -f $(ELF)
+
+-include *.d

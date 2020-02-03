@@ -3,4 +3,5 @@ trace.out
 *.bin
 *.elf
 *.dSYM
+*.d
 *.sublime-workspace

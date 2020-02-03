@@ -32,9 +32,9 @@ typedef void    (*exception_handler_t)(void);
 #define VEC_FORMAT_ERROR    VECTOR(14)          // Format error
 #define VEC_UNINITIALIZED   VECTOR(15)          // Uninitialized interrupt vector
 #define VEC_SPURIOUS        VECTOR(24)          // Spurious interrupt
-#define VEC_AUTOVECTOR(_y)  VECTOR(24 + (_y))   // Level 1 on-chip interrupt autovec
-#define VEC_TRAP(_y)        VECTOR(32 + (_y))   // TRAP instruction vectors
-#define VEC_USER(_y)        VECTOR(64 + (_y))   // User interrupt vectors
+#define VEC_AUTOVECTOR(_y)  VECTOR(24 + (_y))   // Autovectored interrupts (1-7)
+#define VEC_TRAP(_y)        VECTOR(32 + (_y))   // TRAP instruction vectors (0-15)
+#define VEC_USER(_y)        VECTOR(64 + (_y))   // User interrupt vectors (0-63)
 
 static inline void
 zero_bss()
@@ -73,9 +73,9 @@ enable_interrupts()
 	set_sr(0x2000);
 }
 
-extern bool _detect_native_features(void);
-extern uintptr_t _nfID(const char *);
-extern uint32_t _nfCall(uint32_t ID, ...);
+extern bool			_detect_native_features(void);
+extern uint32_t		_nfID(const char *);
+extern uint32_t		_nfCall(uint32_t ID, ...);
 
 /*
  * d0 - return code
@@ -92,20 +92,20 @@ __asm__
 "        move.l  #0x10, %a0                                             \n"
 #endif
 "_detect_native_features:                                               \n"
-"        moveq   #0,%d0              /* assume no NatFeats available */ \n"
-"        move.l  %sp,%a1                                                \n"
-"        move.l  (%a0),%d1                                              \n"
-"        move.l  #_fail_natfeat, (%a0)                                  \n"
+"        moveq   #0, %d0             /* assume no NatFeats available */ \n"
+"        move.l  %sp, %a1                                               \n"
+"        move.l  (%a0), %d1                                             \n"
+"        move.l  #_fail_nf, (%a0)                                       \n"
 "        pea     _nf_version_name                                       \n"
-"        sub.l   #4,%sp                                                 \n"
-"        .dc.w   0x7300              /* Jump to NATFEAT_ID */           \n"
+"        sub.l   #4, %sp                                                \n"
+"        .dc.w   0x7300              /* NATFEAT_ID */                   \n"
 "        tst.l   %d0                                                    \n"
-"        jeq     _fail_natfeat                                          \n"
-"        moveq   #1,%d0              /* NatFeats detected */            \n"
+"        jeq     _fail_nf            /* expect non-zero ID */           \n"
+"        moveq   #1, %d0             /* NatFeats detected */            \n"
 "                                                                       \n"
-"_fail_natfeat:                                                         \n"
-"        move.l  %a1,%sp                                                \n"
-"        move.l  %d1,(%a0)                                              \n"
+"_fail_nf:                                                              \n"
+"        move.l  %a1, %sp                                               \n"
+"        move.l  %d1, (%a0)                                             \n"
 "                                                                       \n"
 "        rts                                                            \n"
 "                                                                       \n"
@@ -122,7 +122,7 @@ __asm__
 );
 
 static uint32_t
-nfID(const char *method)
+nf_id(const char *method)
 {
     static bool probed, supported;
 
@@ -142,7 +142,7 @@ nf_puts(const char *str)
     static uint32_t nfid_stderr = 0;
 
     if (!nfid_stderr) {
-        nfid_stderr = nfID("NF_STDERR");
+        nfid_stderr = nf_id("NF_STDERR");
     }
 
     if (nfid_stderr) {
@@ -156,7 +156,7 @@ nf_exit()
     static uint32_t nfid_shutdown = 0;
 
     if (!nfid_shutdown) {
-        nfid_shutdown = nfID("NF_SHUTDOWN");
+        nfid_shutdown = nf_id("NF_SHUTDOWN");
     }
 
     if (nfid_shutdown) {
