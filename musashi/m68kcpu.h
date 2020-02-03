@@ -1041,14 +1041,14 @@ extern uint pmmu_translate_addr(uint addr_in);
  */
 static inline uint m68ki_read_imm_16(void)
 {
+	uint address = ADDRESS_68K(REG_PC);
+
 	m68ki_set_fc(FLAG_S | FUNCTION_CODE_USER_PROGRAM); /* auto-disable (see m68kcpu.h) */
 	m68ki_check_address_error(REG_PC, MODE_READ, FLAG_S | FUNCTION_CODE_USER_PROGRAM); /* auto-disable (see m68kcpu.h) */
 
-#if M68K_SEPARATE_READS
 #if M68K_EMULATE_PMMU
 	if (PMMU_ENABLED)
 	    address = pmmu_translate_addr(address);
-#endif
 #endif
 
 #if M68K_EMULATE_PREFETCH
@@ -1067,7 +1067,7 @@ static inline uint m68ki_read_imm_16(void)
 }
 #else
 	REG_PC += 2;
-	return m68k_read_immediate_16(ADDRESS_68K(REG_PC-2));
+	return m68k_read_immediate_16(address);
 #endif /* M68K_EMULATE_PREFETCH */
 }
 
@@ -1079,11 +1079,11 @@ static inline uint m68ki_read_imm_8(void)
 
 static inline uint m68ki_read_imm_32(void)
 {
-#if M68K_SEPARATE_READS
+	uint address = ADDRESS_68K(REG_PC);
+
 #if M68K_EMULATE_PMMU
 	if (PMMU_ENABLED)
 	    address = pmmu_translate_addr(address);
-#endif
 #endif
 
 #if M68K_EMULATE_PREFETCH
@@ -1110,9 +1110,9 @@ static inline uint m68ki_read_imm_32(void)
 	return temp_val;
 #else
 	m68ki_set_fc(FLAG_S | FUNCTION_CODE_USER_PROGRAM); /* auto-disable (see m68kcpu.h) */
-	m68ki_check_address_error(REG_PC, MODE_READ, FLAG_S | FUNCTION_CODE_USER_PROGRAM); /* auto-disable (see m68kcpu.h) */
+	m68ki_check_address_error(address, MODE_READ, FLAG_S | FUNCTION_CODE_USER_PROGRAM); /* auto-disable (see m68kcpu.h) */
 	REG_PC += 4;
-	return m68k_read_immediate_32(ADDRESS_68K(REG_PC-4));
+	return m68k_read_immediate_32(address);
 #endif /* M68K_EMULATE_PREFETCH */
 }
 

@@ -50,6 +50,18 @@ static bool                 mem_trace_enabled;
 static mem_device_handler_t mem_dev_handler;
 static mem_trace_handler_t  mem_trace_handler;
 
+static uint32_t             mem_fc;
+#define FC_IS_PROGRAM       ((mem_fc == 2) || (mem_fc == 6))
+#define FC_IS_DATA          ((mem_fc == 1) || (mem_fc == 5))
+#define FC_IS_USER          ((mem_fc == 1) || (mem_fc == 2))
+#define FC_IS_SUPER         ((mem_fc == 5) || (mem_fc == 6))
+
+void
+mem_set_fc(unsigned int new_fc)
+{
+    mem_fc = new_fc;
+}
+
 __attribute__((unused))
 static void
 mem_dump_pagetable()
@@ -410,6 +422,46 @@ unsigned int
 m68k_read_memory_32(unsigned int address)
 {
     return mem_read(address, MEM_WIDTH_32);
+}
+
+unsigned int
+m68k_read_immediate_16(unsigned int address)
+{
+    bool otrace = mem_trace_enabled;
+    mem_trace_enabled = false;
+
+    unsigned int result = m68k_read_memory_16(address);
+    mem_trace_enabled = otrace;
+    return result;
+}
+
+unsigned int
+m68k_read_immediate_32(unsigned int address)
+{
+    bool otrace = mem_trace_enabled;
+    mem_trace_enabled = false;
+
+    unsigned int result = m68k_read_memory_32(address);
+    mem_trace_enabled = otrace;
+    return result;
+}
+
+unsigned int
+m68k_read_pcrelative_8(unsigned int address)
+{
+    return m68k_read_memory_8(address);
+}
+
+unsigned int
+m68k_read_pcrelative_16(unsigned int address)
+{
+    return m68k_read_memory_16(address);
+}
+
+unsigned int
+m68k_read_pcrelative_32(unsigned int address)
+{
+    return m68k_read_memory_32(address);
 }
 
 void
