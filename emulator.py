@@ -136,13 +136,14 @@ class Emulator(object):
         MEM_MAP: 'MAP'
     }
 
+    ILLG_OK = 1
+    ILLG_ERROR = 0
+
     def __init__(self, args, cpu="68000", frequency=8000000):
 
         self._dead = False
         self._exception_info = None
         self._postmortem = None
-        self._first_interrupt_time = 0.0
-        self._interrupt_count = 0
         self._root_device = None
 
         # initialise tracing
@@ -154,9 +155,6 @@ class Emulator(object):
         # files and symbolication
         self._load_image = None
         self._symbol_files = list()
-
-        # 'native features' stderr channel buffer
-        self._message_buffer = ''
 
         # time
         self._cpu_frequency = frequency
@@ -172,7 +170,6 @@ class Emulator(object):
             self._cpu_type = self.cpu_map[cpu]
         except KeyError:
             raise RuntimeError(f"unsupported CPU: {cpu}")
-
         set_cpu_type(self._cpu_type)
         cpu_init()
 
@@ -446,8 +443,7 @@ class Emulator(object):
             info = ''
             for reg in self.registers:
                 if dis.find(reg) is not -1:
-                    info += ' {}={:#x}'.format(reg,
-                                               get_reg(self.registers[reg]))
+                    info += ' {}={:#x}'.format(reg, get_reg(self.registers[reg]))
 
             self.trace('EXECUTE', pc, '{:30} {}'.format(dis, info))
             return
@@ -474,8 +470,15 @@ class Emulator(object):
         """
         Illegal instruction handler - implement 'native features' emulator API
         """
+        if instr == 0x7300:     # nfID
+            self.trace('nFID')
+            return self._nfID(get_reg(self.registers['SP']) + 4)
+        elif instr == 0x7301:     # nfCall
+            self.trace('nFCall')
+            return self._nfCall(get_reg(self.registers['SP']) + 4)
+
         # instruction not handled by emulator, legitimately illegal
-        return 0
+        return self.ILLG_ERROR
 
     def cb_trace_jump(self, new_pc):
         """
@@ -488,7 +491,63 @@ class Emulator(object):
             self.fatal_exception(sys.exc_info())
 
     def _keyboard_interrupt(self, signal=None, frame=None):
-            self.fatal('\rExit due to user interrupt.')
+        self.fatal('\rExit due to user interrupt.')
+
+    def _nfID(self, argptr):
+        id = self._get_string(argptr)
+        if id is None:
+            return self.ILLG_ERROR
+
+        if id == 'NF_VERSION':
+            self.trace('NF_VERSION')
+            set_reg(M68K_REG_D0, 1)
+        # elif id == 'NF_NAME':
+        #    set_reg(M68K_REG_D0, 1)
+        elif id == 'NF_STDERR':
+            self.trace('NF_STDERR')
+            set_reg(M68K_REG_D0, 2)
+        elif id == 'NF_SHUTDOWN':
+            self.trace('NF_SHUTDOWN')
+            set_reg(M68K_REG_D0, 3)
+        else:
+            return self.ILLG_ERROR
+        return self.ILLG_OK
+
+    def _nfCall(self, argptr):
+        func = mem_read_memory(argptr, MEM_WIDTH_32)
+        if func == 0:   # NF_VERSION
+            set_reg(M68K_REG_D0, 1)
+        # elif func == 1:
+        #    pass
+        elif func == 2:
+            return self._nf_stderr(argptr + 4)
+        elif func == 3:
+            self.fatal('shutdown requested')
+        else:
+            return self.ILLG_ERROR
+        return self.ILLG_OK
+
+    def _nf_stderr(self, argptr):
+        msg = self._get_string(argptr)
+        if msg is None:
+            return self.ILLG_ERROR
+        sys.stderr.write(msg)
+        return self.ILLG_OK
+
+    def _get_string(self, argptr):
+        strptr = mem_read_memory(argptr, MEM_WIDTH_32)
+        if strptr == 0xffffffff:
+            return None
+        result = str()
+        while True:
+            c = mem_read_memory(strptr, MEM_WIDTH_8)
+            self.trace('GETSTR', strptr, f'{c}')
+            if c == 0xffffffff:
+                return None
+            if (c == 0) or (len(result) > 255):
+                return result
+            result += chr(c)
+            strptr += 1
 
     def fatal_exception(self, exception_info):
         """
