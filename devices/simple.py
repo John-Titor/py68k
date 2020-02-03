@@ -1,6 +1,11 @@
 from device import Device
 from collections import deque
 
+from musashi.m68k import (
+    M68K_IRQ_SPURIOUS,
+    M68K_IRQ_AUTOVECTOR,
+)
+
 
 class UART(Device):
     """
@@ -57,7 +62,6 @@ class UART(Device):
         if width == Device.WIDTH_8:
             if addr == self._registers['DR']:
                 if self._can_tx:
-                    self.trace('write', f'{self._unit}{chr(value)}')
                     if self._unit == 0:
                         self.console_handle_output(chr(value).encode('latin-1'))
                     self._last_tx_cycle = self.current_cycle
@@ -91,10 +95,11 @@ class UART(Device):
 
     @property
     def _interrupting(self):
-        if self._cr & UART.CR_TX_INTEN and self._can_tx:
+        if (self._cr & UART.CR_TX_INTEN) and self._can_tx:
             return True
-        if self._cr & UART.CR_RX_INTEN and len(self._rxfifo) > 0:
+        if (self._cr & UART.CR_RX_INTEN) and len(self._rxfifo) > 0:
             return True
+        return False
 
     def _handle_console_input(self, input):
         for c in input:
@@ -142,10 +147,8 @@ class Timer(Device):
     def write(self, width, addr, value):
         if width == Device.WIDTH_32:
             if addr == self._registers['PERIOD']:
-                self.trace('set reload', '{}'.format(value))
                 self._period = value
                 self._count = self._period
-
                 self._epoch = self.current_cycle
                 self._last_intr = self._epoch
         elif width == Device.WIDTH_8:
