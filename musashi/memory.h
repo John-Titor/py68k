@@ -11,9 +11,9 @@ typedef enum {
 } mem_operation_t;
 
 typedef enum {
-    MEM_WIDTH_8,
-    MEM_WIDTH_16,
-    MEM_WIDTH_32
+    MEM_SIZE_8 = 8,
+    MEM_SIZE_16 = 16,
+    MEM_SIZE_32 = 32
 } mem_width_t;
 
 typedef enum {

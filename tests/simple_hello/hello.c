@@ -5,15 +5,21 @@
 #include <stdbool.h>
 #include "../simple.h"
 
+static void
+wait_txrdy()
+{
+    while (!(UART_SR & UART_SR_TXRDY)) {
+    }
+}
+
 static int
 putc(int c)
 {
     if (c == '\n') {
         putc('\r');
     }
-    while (!(UART_STATUS & UART_STATUS_TXRDY)) {
-    }
-    UART_DATA = c;
+    wait_txrdy();
+    UART_DR = c;
     return c;
 }
 
@@ -77,10 +83,13 @@ main(void)
     VEC_AUTOVECTOR(6) = timer_handler;
     VEC_AUTOVECTOR(7) = unexpected_exception;
 
+    enable_interrupts();
     puts("Hello Simple!");
     nf_puts("Goodbye Simple!\n");
 
-    UART_CONTROL = UART_CONTROL_TXIE;
+    wait_txrdy();
+    UART_CR = UART_CR_TXINTEN;
 
+    for (;;) ;
     nf_exit();
 }

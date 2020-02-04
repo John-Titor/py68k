@@ -72,9 +72,9 @@ from musashi.m68k import (
     INVALID_READ,
     INVALID_WRITE,
     MEM_MAP,
-    MEM_WIDTH_8,
-    MEM_WIDTH_16,
-    MEM_WIDTH_32,
+    MEM_SIZE_8,
+    MEM_SIZE_16,
+    MEM_SIZE_32,
     MEM_MAP_ROM,
     MEM_MAP_RAM,
     MEM_MAP_DEVICE,
@@ -273,8 +273,8 @@ class Emulator(object):
             # patch the initial stack and entrypoint
             _, stack_limit = self._load_image.get_symbol_range('__STACK__')
             if stack_limit is not None:
-                mem_write_memory(0x0, MEM_WIDTH_32, stack_limit)
-            mem_write_memory(0x4, MEM_WIDTH_32, self._load_image.entrypoint)
+                mem_write_memory(0x0, MEM_SIZE_32, stack_limit)
+            mem_write_memory(0x4, MEM_SIZE_32, self._load_image.entrypoint)
 
         signal.signal(signal.SIGINT, self._keyboard_interrupt)
         print('\nHit ^C to exit\n')
@@ -418,11 +418,11 @@ class Emulator(object):
                 else:
                     raise RuntimeError(f'unexpected mapping type {value}')
             else:
-                if size == MEM_WIDTH_8:
+                if size == MEM_SIZE_8:
                     info = f'{value:#04x}'
-                elif size == MEM_WIDTH_16:
+                elif size == MEM_SIZE_16:
                     info = f'{value:#06x}'
-                elif size == MEM_WIDTH_32:
+                elif size == MEM_SIZE_32:
                     info = f'{value:#010x}'
                 else:
                     raise RuntimeError(f'unexpected trace size {size}')
@@ -511,7 +511,7 @@ class Emulator(object):
         return self.ILLG_OK
 
     def _nfCall(self, argptr):
-        func = mem_read_memory(argptr, MEM_WIDTH_32)
+        func = mem_read_memory(argptr, MEM_SIZE_32)
         if func == 0:   # NF_VERSION
             set_reg(M68K_REG_D0, 1)
         # elif func == 1:
@@ -532,12 +532,12 @@ class Emulator(object):
         return self.ILLG_OK
 
     def _get_string(self, argptr):
-        strptr = mem_read_memory(argptr, MEM_WIDTH_32)
+        strptr = mem_read_memory(argptr, MEM_SIZE_32)
         if strptr == 0xffffffff:
             return None
         result = str()
         while True:
-            c = mem_read_memory(strptr, MEM_WIDTH_8)
+            c = mem_read_memory(strptr, MEM_SIZE_8)
             if c == 0xffffffff:
                 return None
             if (c == 0) or (len(result) > 255):

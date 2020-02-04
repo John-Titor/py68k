@@ -12,14 +12,15 @@ from musashi.m68k import (
     set_int_ack_callback,
     set_irq,
     get_reg,
+    pulse_bus_error,
 
     # Memory API
     MEM_PAGE_MASK,
     MEM_READ,
     MEM_WRITE,
-    MEM_WIDTH_8,
-    MEM_WIDTH_16,
-    MEM_WIDTH_32,
+    MEM_SIZE_8,
+    MEM_SIZE_16,
+    MEM_SIZE_32,
 
     mem_add_device,
     mem_set_device_handler,
@@ -40,6 +41,7 @@ class Device(object):
 
     """
     _register_to_device = dict()
+    _register_map = dict()
     _devices = list()
     _emu = None
     _debug = False
@@ -48,10 +50,6 @@ class Device(object):
 
     _console_output_handler = None
     _console_input_handler = None
-
-    WIDTH_8 = MEM_WIDTH_8
-    WIDTH_16 = MEM_WIDTH_16
-    WIDTH_32 = MEM_WIDTH_32
 
     def __init__(self, args, name, address=None, interrupt=None):
         self._name = name
@@ -70,42 +68,61 @@ class Device(object):
                             help='enable debugging for DEVICE-NAME, \'Device\''
                             ' to trace device framework.')
 
-    def map_registers(self, registers):
-        """
-        Map device registers
-        """
-        if self._address is None:
-            raise RuntimeError('cannot map registers without base address')
-        self._register_name_map = {}
-        for reg in registers:
-            regaddr = self._address + registers[reg]
-            if (regaddr in Device._register_to_device):
-                other = Device._register_to_device[regaddr]
-                if self != other:
-                    raise RuntimeError(f'register at 0x{regaddr:x} already assigned to {other._name}')
-            Device._register_to_device[regaddr] = self
-            self._register_name_map[registers[reg]] = reg
-            # round up to next word address
-            if registers[reg] >= self._size:
-                self._size = (registers[reg] + MEM_PAGE_MASK) & ~MEM_PAGE_MASK
+    def add_register(self, name, offset, size, read=None, write=None):
+        register_address = self._address + offset
+        if size == MEM_SIZE_8:
+            check_span = range(register_address, register_address)
+        elif (size == MEM_SIZE_16):
+            if (register_address & 1) != 0:
+                raise RuntimeError(f'register {name} size 16 at {register_address:#x} not 2-aligned')
+            check_span = range(register_address, register_address + 1)
+        elif (size == MEM_SIZE_32):
+            if (register_address & 3) != 0:
+                raise RuntimeError(f'register {name} size 32 at {register_address:#x} not 4-aligned')
+            check_span = range(register_address, register_address + 3)
+        for check_address in check_span:
+            if check_address in Device._register_map:
+                raise RuntimeError(f'register {name} overlaps {Device.register_name[check_address]}')
+        Device._register_map[register_address] = {
+            'device': self,
+            'name': name,
+            'size': size,
+            'read': read,
+            'write': write,
+        }
+        implied_size = int(offset + (size / 8))
+        if implied_size > self._size:
+            self._size = implied_size
+        if self._debug:
+            Device._emu.trace('MAP_REGISTER',
+                              address=register_address,
+                              info=f'{self._name}:{name} @ {register_address:#x}/{size}')
 
-            if self._debug:
-                Device._emu.trace('DEVICE', address=regaddr,
-                                  info=f'add register {reg}/0x{registers[reg]:x} for {self._name}')
+    def add_registers(self, registers):
+        for name, offset, size, read, write in registers:
+            self.add_register(name, offset, size, read, write)
 
     def trace(self, action, info=''):
         """
         Emit a debug trace message
         """
         if self._debug:
-            Device._emu.trace('DEVICE', info='{}: {} {}'.format(
-                self._name, action, info))
+            Device._emu.trace('DEVICE', info=f'{self._name}: {action} {info}')
 
-    def get_register_name(self, offset):
-        if offset in self._register_name_map:
-            return self._register_name_map[offset]
-        else:
-            return f'???@0x{offset:x}'
+    @classmethod
+    def register_info(self, address):
+        return Device._register_map[address]
+
+    @classmethod
+    def register_name(self, address):
+        try:
+            reg_info = Device.register_info(address)
+            dev_name = reg_info['device']._name
+            name = f'{dev_name}.{reg_info["name"]}@{address:#x}/{reg_info["size"]}'
+        except KeyError:
+            name = f'???@{address:#x}'
+
+        return name
 
     @classmethod
     def register_console_output_handler(cls, handler):
@@ -152,7 +169,7 @@ class Device(object):
     def read(self, width, offset):
         """
         Called when a CPU read access decodes to one of the registers defined in a call to map_registers.
-        width is one of Device.WIDTH_8, Device.WIDTH_16 or Device.WIDTH_32
+        width is one of MEM_SIZE_8, MEM_SIZE_16 or MEM_SIZE_32
         offset is the register offset from the device base address
         Function should return the read value.
         """
@@ -161,7 +178,7 @@ class Device(object):
     def write(self, width, offset, value):
         """
         Called when a CPU write access decodes to one of the registers defined in a call to map_registers.
-        width is one of Device.WIDTH_8, Device.WIDTH_16 or Device.WIDTH_32
+        width is one of MEM_SIZE_8, MEM_SIZE_16 or MEM_SIZE_32
         offset is the register offset from the device base address
         value is the value being written
         """
@@ -201,7 +218,6 @@ class RootDevice(Device):
         super(RootDevice, self).__init__(args=args, name='root')
         Device._emu = emu
         Device._root_device = self
-
         Device._debug = 'device' in args.debug_device
 
         self._trace_io = args.trace_io or args.trace_everything
@@ -243,25 +259,37 @@ class RootDevice(Device):
 
         return M68K_IRQ_SPURIOUS
 
-    def cb_access(self, operation, address, width, value):
+    def cb_access(self, operation, address, size, value):
         try:
             # look for a device
             try:
-                dev = Device._register_to_device[address]
+                reg_info = Device.register_info(address)
             except KeyError:
-                self.trace('lookup', f'failed to find device to handle access @{address:#x}')
-                return 0
+                self.trace('DECODE', f'no device handling {address:#x}/{size}')
+                # XXX bus error?
+                return 0xffffffff
 
-            # dispatch to device emulator
-            offset = address - dev._address
             if operation == MEM_READ:
-                value = dev.read(width, offset)
+                handler_key = 'read'
+            elif operation == MEM_WRITE:
+                handler_key = 'write'
+            else:
+                raise RuntimeError(f'unexpected device access {operation}')
 
+            handler = reg_info[handler_key]
+            if handler is None:
+                self.trace('DECODE', f'no handler {handler_key} for {Device.register_name(address)}')
+                # XXX bus error?
+
+            offset = address - reg_info['device']._address
+
+            if operation == MEM_READ:
+                value = handler()
                 if self._trace_io:
-                    label = f'{dev._name}:{dev.get_register_name(offset).split("/")[0]}'
-                    if width == Device.WIDTH_8:
+                    label = f'{Device.register_name(address)}'
+                    if size == MEM_SIZE_8:
                         str = f'{label} -> {value:#02x}'
-                    elif width == Device.WIDTH_16:
+                    elif size == MEM_SIZE_16:
                         str = f'{label} -> {value:#04x}'
                     else:
                         str = f'{label} -> {value:#08x}'
@@ -269,18 +297,15 @@ class RootDevice(Device):
 
             elif operation == MEM_WRITE:
                 if self._trace_io:
-                    label = f'{dev._name}:{dev.get_register_name(offset).split("/")[-1]}'
-                    if width == Device.WIDTH_8:
+                    label = f'{Device.register_name(address)}'
+                    if size == MEM_SIZE_8:
                         str = f'{label} <- {value:#02x}'
-                    elif width == Device.WIDTH_16:
+                    elif size == MEM_SIZE_16:
                         str = f'{label} <- {value:#04x}'
                     else:
                         str = f'{label} <- {value:#08x}'
                     Device._emu.trace('DEV_WRITE', address=address, info=str)
-
-                dev.write(width, offset, value)
-            else:
-                raise RuntimeError(f'impossible device access {operation}')
+                handler(value)
 
             self.check_interrupts()
 

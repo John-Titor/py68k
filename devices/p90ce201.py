@@ -3,7 +3,8 @@ from device import Device
 from collections import deque
 from musashi.m68k import (
     M68K_IRQ_SPURIOUS,
-    M68K_IRQ_AUTOVECTOR
+    M68K_IRQ_AUTOVECTOR,
+    MEM_SIZE_8,
 )
 
 ADDR_P90Syscon = 0x80001000
@@ -97,12 +98,12 @@ class P90Syscon(Device):
         self._fXTAL = args.p90_crystal_frequency
 
     def read(self, width, offset):
-        if width == Device.WIDTH_16:
+        if width == MEM_SIZE_16:
             if offset == REG_SYSCON1:
                 return P90Syscon.syscon1
             elif offset == REG_SYSCON2:
                 return P90Syscon.syscon2
-        elif width == Device.WIDTH_8:
+        elif width == MEM_SIZE_8:
             if offset == REG_SYSCON1H:
                 return P90Syscon.syscon1 >> 8
             elif offset == REG_SYSCON1L:
@@ -114,12 +115,12 @@ class P90Syscon(Device):
         return 0
 
     def write(self, width, offset, value):
-        if width == Device.WIDTH_16:
+        if width == MEM_SIZE_16:
             if offset == REG_SYSCON1:
                 P90Syscon.syscon1 = value
             elif offset == REG_SYSCON2:
                 P90Syscon.syscon2 = value
-        elif width == Device.WIDTH_8:
+        elif width == MEM_SIZE_8:
             if offset == REG_SYSCON1H:
                 P90Syscon.syscon1 = (P90Syscon.syscon1 & 0xff) + (value << 8)
             elif offset == REG_SYSCON1L:
@@ -309,7 +310,7 @@ class P90UART(Device):
             self.register_console_input_handler(self._handle_console_input)
 
     def read(self, width, offset):
-        if width == Device.WIDTH8:
+        if width == MEM_SIZE_8:
             if offset == REG_SBUF:
                 if len(self._rxfifo) > 0:
                     value = self._rxfifo.popleft()
@@ -330,7 +331,7 @@ class P90UART(Device):
         return 0
 
     def write(self, width, offset, value):
-        if width == Device.WIDTH8:
+        if width == MEM_SIZE_8:
             if offset == REG_SBUF:
                 if self._is_console:
                     self.console_handle.output(chr(value).encode('latin-1'))
@@ -425,14 +426,14 @@ class P90Timer(Device):
             self._divisor = P90Syscon.t2_rate
 
     def read(self, width, offset):
-        if width == Device.WIDTH_16:
+        if width == MEM_SIZE_16:
             if offset == REG_T:
                 self._update_state()
                 return self._t
                 pass
             elif offset == REG_RCAP:
                 return self._rcap
-        elif width == Device.WIDTH_8:
+        elif width == MEM_SIZE_8:
             if offset == REG_TCON:
                 return self._tcon
             elif offset == REG_TIR:
@@ -442,7 +443,7 @@ class P90Timer(Device):
         return 0
 
     def write(self, width, offset, value):
-        if width == Device.WIDTH_16:
+        if width == MEM_SIZE_16:
             if offset == REG_T:
                 self._t = value
                 self._update_state(reload=True)
@@ -450,7 +451,7 @@ class P90Timer(Device):
             elif offset == REG_RCAP:
                 self._rcap = value
                 self._update_state(reload=True)
-        elif width == Device.WIDTH_8:
+        elif width == MEM_SIZE_8:
             if offset == REG_TCON:
                 self._tcon = value
                 self._update_state(reload=True)
@@ -542,7 +543,7 @@ class P90Watchdog(Device):
         self.trace('init done')
 
     def read(self, width, offset):
-        if width == Device.WIDTH8:
+        if width == MEM_SIZE_8:
             if offset == REG_WDTIM:
                 return self._wdtim
             elif offset == REG_WDCON:
@@ -551,7 +552,7 @@ class P90Watchdog(Device):
         return 0
 
     def write(self, width, offset, value):
-        if width == Device.WIDTH8:
+        if width == MEM_SIZE_8:
             if offset == REG_WDTIM:
                 if self._wdcon == 0x5a:
                     self._wdtim = value
@@ -591,7 +592,7 @@ class P90GPIO(Device):
         self.trace('init done')
 
     def read(self, width, offset):
-        if width == Device.WIDTH8:
+        if width == MEM_SIZE_8:
             if offset == REG_GPP:
                 return self._gpp | self._gp
             elif offset == REG_GP:
@@ -599,7 +600,7 @@ class P90GPIO(Device):
         return 0
 
     def write(self, width, offset, value):
-        if width == Device.WIDTH8:
+        if width == MEM_SIZE_8:
             if offset == REG_GPP:
                 self._gpp = value
             elif offset == REG_GP:
@@ -629,7 +630,7 @@ class P90AUX(Device):
         self.trace('init done')
 
     def read(self, width, offset):
-        if width = Device.WIDTH8:
+        if width = MEM_SIZE_8:
             if offset == REG_APP:
                 return self._app | self._apcon
             elif offset == REG_APCON:
@@ -637,7 +638,7 @@ class P90AUX(Device):
         return 0
 
     def write(self, width, offset, value):
-        if width = Device.WIDTH8:
+        if width = MEM_SIZE_8:
             if offset == REG_APP:
                 self._app = value
             elif offset == REG_APCON:

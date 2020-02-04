@@ -4,6 +4,9 @@ from collections import deque
 from musashi.m68k import (
     M68K_IRQ_SPURIOUS,
     M68K_IRQ_AUTOVECTOR,
+    MEM_SIZE_8,
+    MEM_SIZE_16,
+    MEM_SIZE_32,
 )
 
 
@@ -12,12 +15,6 @@ class UART(Device):
     Simple UART
     """
 
-    _registers = {
-        'SR': 0x01,
-        'DR': 0x03,
-        'CR': 0x05,
-        'VR': 0x07,
-    }
     SR_RXRDY = 0x01
     SR_TXRDY = 0x02
 
@@ -29,7 +26,12 @@ class UART(Device):
     def __init__(self, args, address, interrupt):
         super(UART, self).__init__(args=args, name='uart',
                                    address=address, interrupt=interrupt)
-        self.map_registers(self._registers)
+        self.add_registers([
+            ('SR', 0x01, MEM_SIZE_8, self._read_sr, None),
+            ('DR', 0x03, MEM_SIZE_8, self._read_dr, self._write_dr),
+            ('CR', 0x05, MEM_SIZE_8, self._read_cr, self._write_cr),
+            ('VR', 0x06, MEM_SIZE_8, self._read_vr, self._write_vr),
+        ])
         self.reset()
         self._unit = UART._unit
         UART._unit += 1
@@ -40,35 +42,36 @@ class UART(Device):
     def add_arguments(self, parser):
         pass
 
-    def read(self, width, addr):
+    def _read_sr(self):
         value = 0
-        if width == Device.WIDTH_8:
-            if addr == self._registers['SR']:
-                if self._can_tx:
-                    value |= UART.SR_TXRDY
-                if len(self._rxfifo) > 0:
-                    value |= UART.SR_RXRDY
-            elif addr == self._registers['DR']:
-                if len(self._rxfifo) > 0:
-                    value = self._rxfifo.popleft()
-            elif addr == self._registers['CR']:
-                value = self._cr
-            elif addr == self._registers['VR']:
-                value = self._vr
-
+        if self._can_tx:
+            value |= UART.SR_TXRDY
+        if len(self._rxfifo) > 0:
+            value |= UART.SR_RXRDY
         return value
 
-    def write(self, width, addr, value):
-        if width == Device.WIDTH_8:
-            if addr == self._registers['DR']:
-                if self._can_tx:
-                    if self._unit == 0:
-                        self.console_handle_output(chr(value).encode('latin-1'))
-                    self._last_tx_cycle = self.current_cycle
-            elif addr == self._registers['CR']:
-                self._cr = value
-            elif addr == self._registers['VR']:
-                self._vr = value
+    def _read_dr(self):
+        if len(self._rxfifo) > 0:
+            return self._rxfifo.popleft()
+        return 0
+
+    def _write_dr(self, value):
+        if self._can_tx:
+            if self._unit == 0:
+                self.console_handle_output(chr(value).encode('latin-1'))
+            self._last_tx_cycle = self.current_cycle
+
+    def _read_cr(self):
+        return self._cr
+
+    def _write_cr(self, value):
+        self._cr = value
+
+    def _read_vr(self):
+        return self._vr
+
+    def _write_vr(self, value):
+        self._vr = value
 
     def reset(self):
         self._rxfifo = deque()
@@ -111,51 +114,48 @@ class Timer(Device):
     A simple up-counting timer with programmable period
     """
 
-    _registers = {
-        'PERIOD': 0x00,
-        'COUNT': 0x04,
-        'CONTROL': 0x09,
-        'VECTOR': 0x0b,
-    }
     CONTROL_INTEN = 0x01
 
     def __init__(self, args, address, interrupt):
         super(Timer, self).__init__(args=args, name='timer',
                                     address=address, interrupt=interrupt)
-        self.map_registers(self._registers)
+
+        self.add_registers([
+            ('PERIOD',  0x00, MEM_SIZE_32, self._read_period,  self._write_period),
+            ('COUNT',   0x04, MEM_SIZE_32, self._read_count,   None),
+            ('CONTROL', 0x09, MEM_SIZE_8,  self._read_control, self._write_control),
+            ('VECTOR',  0x0b, MEM_SIZE_8,  self._read_vector,  self._write_vector),
+        ])
         self.reset()
 
     @classmethod
     def add_arguments(self, parser):
         pass
 
-    def read(self, width, addr):
-        value = 0
-        if width == Device.WIDTH_32:
-            if addr == self._registers['PERIOD']:
-                value = self._period
-            if addr == self._registers['COUNT']:
-                self.tick()
-                value = self._count
-        elif width == Device.WIDTH_8:
-            if addr == self._registers['CONTROL']:
-                value = self._control
-            if addr == self._registers['VECTOR']:
-                value = self._vector
-        return value
+    def _read_period(self):
+        return self._period
 
-    def write(self, width, addr, value):
-        if width == Device.WIDTH_32:
-            if addr == self._registers['PERIOD']:
-                self._period = value
-                self._count = self._period
-                self._epoch = self.current_cycle
-                self._last_intr = self._epoch
-        elif width == Device.WIDTH_8:
-            if addr == self._registers['CONTROL']:
-                self._control = value
-            if addr == self._registers['VECTOR']:
-                self._vector = value
+    def _write_period(self, value):
+        self._period = value
+        self._count = self._period
+        self._epoch = self.current_cycle
+        self._last_intr = self._epoch
+
+    def _read_count(self):
+        self.tick()
+        return self._count
+
+    def _read_control(self):
+        return self._control
+
+    def _write_control(self, value):
+        self._control = value
+
+    def _read_vector(self):
+        return self._vector
+
+    def _write_vector(self, value):
+        self._control = value
 
     def tick(self):
         # do nothing if we are disabled

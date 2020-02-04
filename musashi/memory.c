@@ -133,14 +133,14 @@ mem_read(uint32_t address, uint32_t size)
                     uint8_t *dp = bp->buf + offset;
                     uint32_t ret = 0;
                     switch (size) {
-                    case MEM_WIDTH_32:
+                    case MEM_SIZE_32:
                         ret = *dp++;
                         ret = (ret << 8) + *dp++;
                         // FALLTHROUGH
-                    case MEM_WIDTH_16:
+                    case MEM_SIZE_16:
                         ret = (ret << 8) + *dp++;
                         // FALLTHROUGH
-                    case MEM_WIDTH_8:
+                    case MEM_SIZE_8:
                         ret = (ret << 8) + *dp;
                         mem_trace(MEM_READ, address, size, ret);
                         return ret;
@@ -178,14 +178,14 @@ mem_write(uint32_t address, uint32_t size, uint32_t value)
                     uint8_t *dp = bp->buf + offset;
                     mem_trace(MEM_WRITE, address, size, value);
                     switch (size) {
-                    case MEM_WIDTH_32:
+                    case MEM_SIZE_32:
                         *dp++ = (value >> 24) & 0xff;
                         *dp++ = (value >> 16) & 0xff;
                         // FALLTHROUGH
-                    case MEM_WIDTH_16:
+                    case MEM_SIZE_16:
                         *dp++ = (value >> 8) & 0xff;
                         // FALLTHROUGH
-                    case MEM_WIDTH_8:
+                    case MEM_SIZE_8:
                         *dp = value & 0xff;
                         return;
                     }
@@ -347,14 +347,14 @@ mem_read_memory(uint32_t address, uint32_t size)
                 uint8_t *dp = bp->buf + offset;
                 uint32_t ret = 0;
                 switch (size) {
-                case MEM_WIDTH_32:
+                case MEM_SIZE_32:
                     ret = *dp++;
                     ret = (ret << 8) + *dp++;
                     // FALLTHROUGH
-                case MEM_WIDTH_16:
+                case MEM_SIZE_16:
                     ret = (ret << 8) + *dp++;
                     // FALLTHROUGH
-                case MEM_WIDTH_8:
+                case MEM_SIZE_8:
                     ret = (ret << 8) + *dp;
                     return ret;
                 }
@@ -377,14 +377,14 @@ mem_write_memory(uint32_t address, uint32_t size, uint32_t value)
             if ((offset + size) <= bp->size) {
                 uint8_t *dp = bp->buf + offset;
                 switch (size) {
-                case MEM_WIDTH_32:
+                case MEM_SIZE_32:
                     *dp++ = (value >> 24) & 0xff;
                     *dp++ = (value >> 16) & 0xff;
                     // FALLTHROUGH
-                case MEM_WIDTH_16:
+                case MEM_SIZE_16:
                     *dp++ = (value >> 8) & 0xff;
                     // FALLTHROUGH
-                case MEM_WIDTH_8:
+                case MEM_SIZE_8:
                     *dp = value & 0xff;
                     return;
                 }
@@ -400,7 +400,7 @@ mem_write_bulk(uint32_t address, uint8_t *buffer, uint32_t size)
     // could make this faster...
     debug("bulk write 0x%x, from %p size %u", address, buffer, size);
     while (size--) {
-        mem_write_memory(address++, MEM_WIDTH_8, *buffer++);
+        mem_write_memory(address++, MEM_SIZE_8, *buffer++);
     }
 }
 
@@ -409,19 +409,19 @@ mem_write_bulk(uint32_t address, uint8_t *buffer, uint32_t size)
 unsigned int
 m68k_read_memory_8(unsigned int address)
 {
-    return mem_read(address, MEM_WIDTH_8);
+    return mem_read(address, MEM_SIZE_8);
 }
 
 unsigned int
 m68k_read_memory_16(unsigned int address)
 {
-    return mem_read(address, MEM_WIDTH_16);
+    return mem_read(address, MEM_SIZE_16);
 }
 
 unsigned int
 m68k_read_memory_32(unsigned int address)
 {
-    return mem_read(address, MEM_WIDTH_32);
+    return mem_read(address, MEM_SIZE_32);
 }
 
 unsigned int
@@ -467,29 +467,29 @@ m68k_read_pcrelative_32(unsigned int address)
 void
 m68k_write_memory_8(unsigned int address, unsigned int value)
 {
-    return mem_write(address, MEM_WIDTH_8, value);
+    return mem_write(address, MEM_SIZE_8, value);
 }
 
 void
 m68k_write_memory_16(unsigned int address, unsigned int value)
 {
-    return mem_write(address, MEM_WIDTH_16, value);
+    return mem_write(address, MEM_SIZE_16, value);
 }
 
 void
 m68k_write_memory_32(unsigned int address, unsigned int value)
 {
-    return mem_write(address, MEM_WIDTH_32, value);
+    return mem_write(address, MEM_SIZE_32, value);
 }
 
 unsigned int
 m68k_read_disassembler_16 (unsigned int address)
 {
-    return mem_read_memory(address, MEM_WIDTH_16);
+    return mem_read_memory(address, MEM_SIZE_16);
 }
 
 unsigned int
 m68k_read_disassembler_32 (unsigned int address)
 {
-    return mem_read_memory(address, MEM_WIDTH_32);
+    return mem_read_memory(address, MEM_SIZE_32);
 }

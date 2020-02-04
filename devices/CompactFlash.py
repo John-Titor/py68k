@@ -285,7 +285,7 @@ class CompactFlash(Device):
             self.trace('IOERR', 'data read when not reading / identifying')
             return 0
 
-        if width == Device.WIDTH_8:
+        if width == MEM_SIZE_8:
             count = 1
         else:
             count = 2
@@ -323,7 +323,7 @@ class CompactFlash(Device):
 
         data = bytearray()
         data.append(value & 0xff)
-        if width == Device.WIDTH_16:
+        if width == MEM_SIZE_16:
             data.append(value >> 8)
 
         if self._bytes_remaining < len(data):

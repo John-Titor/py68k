@@ -29,6 +29,7 @@ Features:
   ✘ inject arbitrary RAM contents @cancelled (20-01-31 09:34)
 
 Devices:
+  ☐ root_device should signal bus error on failed register decode
   I2C:
     ☐ generic I2C 'bus'
     ☐ DS1232 RTC
