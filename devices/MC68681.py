@@ -1,6 +1,9 @@
 import sys
 from device import Device
 from collections import deque
+from musashi.m68k import (
+    MEM_SIZE_8,
+)
 
 
 class Channel():
@@ -55,74 +58,70 @@ class Channel():
         self._rxEnable = False
         self._txEnable = False
 
-    def read(self, addr):
-        # default read result
+    def read_mr(self):
+        if self._mrAlt:
+            return = self._mr2
+        else:
+            self._mrAlt = True
+            return = self._mr1
+
+    def read_sr(self):
+        return self._sr
+
+    def read_rb(self):
         value = 0xff
-
-        if addr == Channel.REG_MR:
-            if self._mrAlt:
-                value = self._mr2
-            else:
-                self._mrAlt = True
-                value = self._mr1
-
-        elif addr == Channel.REG_SR:
-            value = self._sr
-
-        elif addr == Channel.REG_RB:
-            if len(self._rxfifo) > 0:
-                value = self._rxfifo.popleft()
-
-        self.update_status()
+        if len(self._rxfifo) > 0:
+            value = self._rxfifo.popleft()
         return value
 
-    def write(self, addr, value):
+    def write_mr(self, value):
+        if self._mrAlt:
+            self._mr2 = value
+        else:
+            self._mrAlt = True
+            self._mr1 = value
 
-        if addr == Channel.REG_MR:
-            if self._mrAlt:
-                self._mr2 = value
-            else:
-                self._mrAlt = True
-                self._mr1 = value
+    def write_csr(self, value):
+        pass
 
-        elif addr == Channel.REG_CSR:
-            pass
+    def write_cr(self, value):
+        # rx/tx dis/enable logic
+        if value & Channel.CTRL_RXDIS:
+            self._rxEnable = False
+        elif value & Channel.CTRL_RXEN:
+            self._rxEnable = True
+        if value & Channel.CTRL_TXDIS:
+            self._txEnable = False
+        elif value & Channel.CTRL_TXEN:
+            self._txEnable = True
 
-        elif addr == Channel.REG_CR:
-            # rx/tx dis/enable logic
-            if value & Channel.CTRL_RXDIS:
-                self._rxEnable = False
-            elif value & Channel.CTRL_RXEN:
-                self._rxEnable = True
-            if value & Channel.CTRL_TXDIS:
-                self._txEnable = False
-            elif value & Channel.CTRL_TXEN:
-                self._txEnable = True
+        cmd = value & Channel.CTRL_CMD_MASK
+        if cmd == Channel.CTRL_MRRST:
+            self._mrAlt = False
+        elif cmd == Channel.CTRL_RXRST:
+            self._rxEnable = False
+            self._rxfifo.clear()
+        elif cmd == Channel.CTRL_TXRST:
+            self._txEnable = False
+            # self._txfifo
 
-            cmd = value & Channel.CTRL_CMD_MASK
-            if cmd == Channel.CTRL_MRRST:
-                self._mrAlt = False
-            elif cmd == Channel.CTRL_RXRST:
-                self._rxEnable = False
-                self._rxfifo.clear()
-            elif cmd == Channel.CTRL_TXRST:
-                self._txEnable = False
-                # self._txfifo
+    def write_tb(self, value):
+        self._parent.console_handle_output(chr(value).encode('latin-1'))
 
-        elif addr == Channel.REG_TB and self._is_console:
-            self._parent.console_handle_output(chr(value).encode('latin-1'))
+    def tick(self):
+        return self._update_status()
 
-        self.update_status()
-
-    def update_status(self):
+    def _update_status(self):
         # transmitter is always ready
         self._sr = Channel.STATUS_TRANSMITTER_EMPTY | Channel.STATUS_TRANSMITTER_READY
 
+        # rx is ready or full depending on fifo occupancy
         rxcount = len(self._rxfifo)
         if rxcount > 0:
             self._sr |= Channel.STATUS_RECEIVER_READY
             if (rxcount > 2):
                 self._sr |= Channel.STATUS_FIFO_FULL
+        return 0
 
     def get_interrupts(self):
 
@@ -141,8 +140,6 @@ class Channel():
     def _handle_console_input(self, input):
         for c in input:
             self._rxfifo.append(c)
-        self.update_status()
-        self._parent.update_status()
 
 
 class Counter():
@@ -165,8 +162,36 @@ class Counter():
         self.set_mode(Counter.MODE_TMR_XTAL16)
         self._timer_epoch = self._parent.current_cycle
 
-    def set_mode(self, mode):
-        mode &= Counter.MODE_MASK
+    def read_cur(self):
+        self._update_status()
+        return self._count >> 8
+
+    def read_clr(self):
+        self._update_status()
+        return self._count & 0xff
+
+    def read_startcc(self):
+        if self._mode_is_counter:
+            self._running = True
+            self._counter_deadline = self._parent.current_cycle + self._reload * self._prescale
+        else:
+            self._timer_epoch = self._parent.current_cycle
+            self._timer_deadline = self._timer_epoch + self._timer_period
+        return 0xff
+
+    def read_stopcc(self):
+        if self._mode_is_counter:
+            self._update_status()
+            self._running = False
+        else:
+            current_cycle = self._parent.current_cycle
+            last_interrupt_cycle = current_cycle - (current_cycle % self._timer_period)
+            self._timer_deadline = last_interrupt_cycle + self._timer_period
+        self._interrupting = False
+        return 0xff
+
+    def write_acr(self, value):
+        mode = value & Counter.MODE_MASK
         cycle_ratio = self._parent.cycle_rate / 3686400.0
 
         if (mode == Counter.MODE_CTR_TXCA) or (mode == Counter.MODE_CTR_TXCB):
@@ -182,40 +207,16 @@ class Counter():
 
         self._mode = mode
 
-    def set_reload_low(self, value):
+    def tick(self):
+        return self._update_status()
+
+    def write_ctlr(self, value):
         self._reload = (self._reload & 0xff00) | value
 
-    def set_reload_high(self, value):
+    def write_ctur(self, value):
         self._reload = (self._reload & 0x00ff) | (value << 8)
 
-    def start(self):
-        if self._mode_is_counter:
-            self._running = True
-            self._counter_deadline = self._parent.current_cycle + self._reload * self._prescale
-        else:
-            self._timer_epoch = self._parent.current_cycle
-            self._timer_deadline = self._timer_epoch + self._timer_period
-
-    def stop(self):
-        if self._mode_is_counter:
-            self._update_state()
-            self._running = False
-        else:
-            current_cycle = self._parent.current_cycle
-            last_interrupt_cycle = current_cycle - (current_cycle % self._timer_period)
-            self._timer_deadline = last_interrupt_cycle + self._timer_period
-        self._interrupting = False
-
-    def get_count(self):
-        self._update_state()
-        return self._count
-
-    @property
-    def is_interrupting(self):
-        self._update_state()
-        return self._interrupting
-
-    def _update_state(self):
+    def _update_status(self):
         ret = None
         current_cycle = self._parent.current_cycle
         if self._mode_is_counter:
@@ -238,8 +239,10 @@ class Counter():
                 ret = self._timer_deadline - current_cycle
         return ret
 
-    def tick(self):
-        return self._update_state()
+    @property
+    def is_interrupting(self):
+        self._update_status()
+        return self._interrupting
 
     @property
     def _mode_is_counter(self):
@@ -305,13 +308,29 @@ class MC68681(Device):
                                       name='MC68681',
                                       address=address,
                                       interrupt=interrupt)
-        self.map_registers(MC68681._registers)
 
         self._a = Channel(self, args.duart_console_port == 'A')
         self._b = Channel(self, args.duart_console_port == 'B')
         self._counter = Counter(self)
+        self.add_registers([
+            ('MRA',            0x01, MEM_SIZE_8, self._a.read_mr,            self._a.write_mr),
+            ('SRA/CSRA',       0x03, MEM_SIZE_8, self._a.read_sr,            self._a.write_csr),
+            ('CRA',            0x05, MEM_SIZE_8, self._a.read_cr,            self._a.write_cr),
+            ('RBA/TBA',        0x07, MEM_SIZE_8, self._a.read_rb,            self._a.write_tb),
+            ('IPCR/ACR',       0x09, MEM_SIZE_8, self._read_ipcr,            self._counter.write_acr),
+            ('ISR/IMR',        0x0b, MEM_SIZE_8, self._read_isr,             self._write_imr),
+            ('CUR/CTUR',       0x0d, MEM_SIZE_8, self._counter.read_cur,     self._counter.write_ctur),
+            ('CLR/CTLR',       0x0f, MEM_SIZE_8, self._counter.read_clr,     self._counter.write_ctlr),
+            ('MRB',            0x11, MEM_SIZE_8, self._b.read_mr,            self._b.write_mr),
+            ('SRB/CSRB',       0x13, MEM_SIZE_8, self._b.read_sr,            self._b.write_csr),
+            ('CRB',            0x15, MEM_SIZE_8, self._b.read_cr,            self._b.write_cr),
+            ('RBB/TBB',        0x17, MEM_SIZE_8, self._b.read_rb,            self._b.write_tb),
+            ('IVR',            0x19, MEM_SIZE_8, self._read_ivr,             self._write_ivr),
+            ('IPR/OPCR',       0x1b, MEM_SIZE_8, self._read_ipr,             self._write_nop),
+            ('STARTCC/OPRSET', 0x1d, MEM_SIZE_8, self._counter.read_startcc, self._write_nop),
+            ('STOPCC/OPRCLR',  0x1f, MEM_SIZE_8, self._counter.read_stopcc,  self._write_nop),
+        ])
         self.reset()
-        self.trace('init done')
 
     @classmethod
     def add_arguments(cls, parser, default_console_port='none'):
@@ -322,86 +341,38 @@ class MC68681(Device):
                             help='MC68681 DUART port to treat as console')
         return
 
-    def read(self, width, offset):
-        regsel = offset & MC68681.REG_SELMASK
-        if regsel == MC68681.REG_SEL_A:
-            value = self._a.read(offset - MC68681.REG_SEL_A)
+    def _read_ipcr(self):
+        return 0x03  # CTSA/CTSB are always asserted
 
-        elif regsel == MC68681.REG_SEL_B:
-            value = self._b.read(offset - MC68681.REG_SEL_B)
+    def _read_isr(self):
+        self._update_status()
+        return self._isr
 
-        elif offset == MC68681.REG_IPCR:
-            value = 0x03  # CTSA/CTSB are always asserted
+    def _read_ivr(self):
+        return self._ivr
 
-        elif offset == MC68681.REG_ISR:
-            value = self._isr
+    def _read_ipr(self):
+        return 0x03  # CTSA/CTSB are always asserted
 
-        elif offset == MC68681.REG_CUR:
-            value = self._counter.get_count() >> 8
+    def _write_imr(self, value):
+        self._imr = value
+        # XXX interrupt status may have changed...
 
-        elif offset == MC68681.REG_CLR:
-            value = self._counter.get_count() & 0xff
+    def _write_ivr(self, value):
+        self._ivr = value
 
-        elif offset == MC68681.REG_IVR:
-            value = self._ivr
-
-        elif offset == MC68681.REG_IPR:
-            value = 0x03  # CTSA/CTSB are always asserted
-
-        elif offset == MC68681.REG_STARTCC:
-            self._counter.start()
-            value = 0xff
-
-        elif offset == MC68681.REG_STOPCC:
-            self._counter.stop()
-            value = 0xff
-
-        else:
-            raise RuntimeError('read from 0x{:02x} not handled'.format(offset))
-
-        self.update_status()
-        return value
-
-    def write(self, width, offset, value):
-        regsel = offset & MC68681.REG_SELMASK
-        if regsel == MC68681.REG_SEL_A:
-            self._a.write(offset - MC68681.REG_SEL_A, value)
-
-        elif regsel == MC68681.REG_SEL_B:
-            self._b.write(offset - MC68681.REG_SEL_B, value)
-
-        elif offset == MC68681.REG_ACR:
-            self._counter.set_mode(value)
-
-        elif offset == MC68681.REG_IMR:
-            self._imr = value
-            # XXX interrupt status may have changed...
-
-        elif offset == MC68681.REG_CTUR:
-            self._counter.set_reload_high(value)
-
-        elif offset == MC68681.REG_CTLR:
-            self._counter.set_reload_low(value)
-
-        elif offset == MC68681.REG_IVR:
-            self._ivr = value
-
-        elif offset == MC68681.REG_OPCR:
-            pass
-        elif offset == MC68681.REG_OPRSET:
-            pass
-        elif offset == MC68681.REG_OPRCLR:
-            pass
-        else:
-            raise RuntimeError('write to 0x{:02x} not handled'.format(offset))
-
-        self.update_status()
+    def _write_nop(self, value):
+        pass
 
     def tick(self):
-        quantum = self._counter.tick()
-        self.update_status()
-        self.trace('DUART', info=f'tick isr {self._isr:#x} imr {self._imr:#x}')
-        return quantum
+        cq = self._counter.tick()
+        aq = self._a.tick()
+        bq = self._b.tick()
+
+        for q in [cq, aq, bq].sorted():
+            if q > 0:
+                break
+        return q
 
     def reset(self):
         self._a.reset()
@@ -413,7 +384,7 @@ class MC68681(Device):
         self._countReload = 0xffff
 
     def get_interrupt(self):
-        self.update_status()
+        self._update_status()
         if self._isr & self._imr:
             return self._interrupt
         return 0
@@ -424,7 +395,7 @@ class MC68681(Device):
                 return self._ivr
         return M68K_IRQ_SPURIOUS
 
-    def update_status(self):
+    def _update_status(self):
         self._isr &= ~0x3b
         if self._counter.is_interrupting:
             self._isr |= 0x08

@@ -45,7 +45,7 @@ static void
 uart_handler()
 {
     puts("\nUART\n");
-    for (;;) ;
+    UART_CR = 0;
 }
 
 __attribute__((interrupt))
@@ -90,6 +90,5 @@ main(void)
     wait_txrdy();
     UART_CR = UART_CR_TXINTEN;
 
-    for (;;) ;
     nf_exit();
 }

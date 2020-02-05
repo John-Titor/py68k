@@ -9,6 +9,9 @@ import time
 
 
 class Console():
+    """
+    console server
+    """
 
     # VT100 and a smattering of later DEC encodings
     input_keymap = {

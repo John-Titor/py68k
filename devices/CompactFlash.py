@@ -2,32 +2,14 @@ import sys
 import io
 import struct
 from device import Device
+from musashi.m68k import (
+    MEM_SIZE_8,
+    MEM_SIZE_16,
+    MEM_SIZE_32,
+)
+
 
 SECTOR_SIZE = 512
-
-REG_DATA16 = 0x00
-REG_DATA8 = 0x01
-REG_ERROR = 0x03
-REG_FEATURE = 0x03
-REG_SECTOR_COUNT = 0x05
-REG_SECTOR_NUMBER = 0x07
-REG_CYLINDER_LOW = 0x09
-REG_CYLINDER_HIGH = 0x0b
-REG_DRIVE_HEAD = 0x0d
-REG_STATUS = 0x0f
-REG_COMMAND = 0x0f
-
-cf_registers = {
-    'DATA16': 0x00,
-    'DATA8': 0x01,
-    'ERROR/FEATURE': 0x03,
-    'SECTOR_COUNT': 0x05,
-    'SECTOR_NUMBER': 0x07,
-    'CYLINDER_LOW': 0x09,
-    'CYLINDER_HIGH': 0x0b,
-    'DRIVE/HEAD': 0x0d,
-    'STATUS/COMMAND': 0x0f
-}
 
 STATUS_ERR = 0x01
 STATUS_DRQ = 0x08
@@ -61,6 +43,17 @@ class CompactFlash(Device):
 
     def __init__(self, args, address, interrupt):
         super(CompactFlash, self).__init__(args=args, name='CF', address=address)
+        self.add_registers([
+            ('DATA16',         0x00, MEM_SIZE_16, self._read_data16,        self._write_data16),
+            ('DATA8',          0x01, MEM_SIZE_8,  self._read_data8,         self._write_data8),
+            ('ERROR/FEATURE',  0x03, MEM_SIZE_8,  self._read_error,         self._write_feature),
+            ('SECTOR_COUNT',   0x05, MEM_SIZE_8,  self._read_sector_count,  self._write_sector_count),
+            ('SECTOR_NUMBER',  0x07, MEM_SIZE_8,  self._read_sector_number, self._write_sector_number),
+            ('CYLINDER_LOW',   0x09, MEM_SIZE_8,  self._read_cylinder_low,  self._write_cylinder_low),
+            ('CYLINDER_HIGH',  0x0b, MEM_SIZE_8,  self._read_cylinder_high, self._write_cylinder_high),
+            ('DRIVE/HEAD',     0x0d, MEM_SIZE_8,  self._read_drive_head,    self._write_drive_head),
+            ('STATUS/COMMAND', 0x0f, MEM_SIZE_8,  self._read_status,        self._write_command),
+        ])
         self.map_registers(cf_registers)
 
         # open the backing file
@@ -158,72 +151,58 @@ class CompactFlash(Device):
                             default=None,
                             help='CF disk image file')
 
+    def _read_data16(self):
+        return self._io_read(MEM_SIZE_16)
 
-    def read(self, width, offset):
-        if offset == REG_DATA16:
-            value = self._io_read(width)
+    def _read_data8(self):
+        return self._io_read(MEM_SIZE_8)
 
-        elif offset == REG_DATA8:
-            value = self._io_read(width)
+    def _read_error(self):
+        return self._r_error
 
-        elif offset == REG_ERROR:
-            value = self._r_error
+    def _read_sector_count(self):
+        return self._r_sector_count
 
-        elif offset == REG_SECTOR_COUNT:
-            value = self._r_sector_count
+    def _read_sector_number(self):
+        return self._r_sector_number
 
-        elif offset == REG_SECTOR_NUMBER:
-            value = self._r_sector_number
+    def _read_cylinder_low(self):
+        return self._r_cylinder & 0xff
 
-        elif offset == REG_CYLINDER_LOW:
-            value = self._r_cylinder & 0xff
+    def _read_cylinder_high(self):
+        return self._r_cylinder >> 8
 
-        elif offset == REG_CYLINDER_HIGH:
-            value = self._r_cylinder >> 8
+    def _read_drive_head(self):
+        return self._r_drive_head
 
-        elif offset == REG_DRIVE_HEAD:
-            value = self._r_drive_head
+    def _read_status(self):
+        return self._r_status
 
-        elif offset == REG_STATUS:
-            value = self._r_status
+    def _write_data16(self, value):
+        self._io_write(MEM_SIZE_16, value)
 
-        else:
-            raise RuntimeError('read from 0x{:02x} not handled'.format(offset))
+    def _write_data8(self, value):
+        self._io_write(MEM_SIZE_8, value)
 
-        return value
+    def _write_feature(self, value):
+        self._r_feature = value
 
-    def write(self, width, offset, value):
-        if offset == REG_DATA16:
-            self._io_write(width, value)
+    def _write_sector_count(self, value):
+        self._r_sector_count = value
 
-        elif offset == REG_DATA8:
-            self._io_write(width, value)
+    def _write_sector_number(self, value):
+        self._r_sector_number = value
 
-        elif offset == REG_FEATURE:
-            self._r_feature = value
+    def _write_cylinder_low(self, value):
+        self._r_cylinder = (self._r_cylinder & 0xff00) | value
 
-        elif offset == REG_SECTOR_COUNT:
-            self._r_sector_count = value
+    def _write_cylinder_high(self, value):
+        self._r_cylinder = (self._r_cylinder & 0x00ff) | (value << 8)
 
-        elif offset == REG_SECTOR_NUMBER:
-            self._r_sector_number = value
+    def _write_drive_head(self, value):
+        self._r_drive_head = value
 
-        elif offset == REG_CYLINDER_LOW:
-            self._r_cylinder = (self._r_cylinder & 0xff00) | value
-
-        elif offset == REG_CYLINDER_HIGH:
-            self._r_cylinder = (self._r_cylinder & 0x00ff) | (value << 8)
-
-        elif offset == REG_DRIVE_HEAD:
-            self._r_drive_head = value
-
-        elif offset == REG_COMMAND:
-            self._command(value)
-
-        else:
-            raise RuntimeError('write to 0x{:02x} not handled'.format(offset))
-
-    def _command(self, command):
+    def _write_command(self, value):
         if command == CMD_READ_SECTORS:
             self._trace_io('READ')
             self._do_io(AMODE_READ)

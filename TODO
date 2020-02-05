@@ -30,12 +30,19 @@ Features:
 
 Devices:
   ☐ root_device should signal bus error on failed register decode
+  ✔ always call device.tick after handling register access @done (20-02-04 22:48)
+    ✔ tick should also check for interrupt assertion @done (20-02-04 22:48)
+    ✘ don't mask set_irq against CPSR @cancelled (20-02-04 22:48)
+    ✔ scrub devices for redundant status updates @done (20-02-04 23:08)
+    ✔ scrub devices : don't allow tick to return None @done (20-02-04 23:08)
+  ☐ option to en/disable buserror generation
+  ☐ console input should cause tick
   I2C:
     ☐ generic I2C 'bus'
     ☐ DS1232 RTC
     ☐ display?
   CF/ATA:
-    ☐ reset behaviour
+    ✘ reset behaviour @cancelled (20-02-04 22:32)
       Can't be done for Tiny68k as /CS1 is permanently high
     ✔ IDENTIFY DEVICE @done (20-01-11 09:14)
     ✔ option to set disk file @done (20-01-25 21:40)

@@ -5,6 +5,7 @@ import selectors
 
 from musashi.m68k import (
     # Musashi API
+    end_timeslice,
     M68K_REG_SR,
     M68K_IRQ_SPURIOUS,
     M68K_IRQ_AUTOVECTOR,
@@ -69,20 +70,18 @@ class Device(object):
                             ' to trace device framework.')
 
     def add_register(self, name, offset, size, read=None, write=None):
+        """
+        add a register to be handled by the device
+        """
         register_address = self._address + offset
         if size == MEM_SIZE_8:
-            check_span = range(register_address, register_address)
+            pass
         elif (size == MEM_SIZE_16):
             if (register_address & 1) != 0:
                 raise RuntimeError(f'register {name} size 16 at {register_address:#x} not 2-aligned')
-            check_span = range(register_address, register_address + 1)
         elif (size == MEM_SIZE_32):
             if (register_address & 3) != 0:
                 raise RuntimeError(f'register {name} size 32 at {register_address:#x} not 4-aligned')
-            check_span = range(register_address, register_address + 3)
-        for check_address in check_span:
-            if check_address in Device._register_map:
-                raise RuntimeError(f'register {name} overlaps {Device.register_name[check_address]}')
         Device._register_map[register_address] = {
             'device': self,
             'name': name,
@@ -99,6 +98,9 @@ class Device(object):
                               info=f'{self._name}:{name} @ {register_address:#x}/{size}')
 
     def add_registers(self, registers):
+        """
+        add registers in bulk
+        """
         for name, offset, size, read, write in registers:
             self.add_register(name, offset, size, read, write)
 
@@ -111,10 +113,16 @@ class Device(object):
 
     @classmethod
     def register_info(self, address):
+        """
+        get the info dictionary for the register at address
+        """
         return Device._register_map[address]
 
     @classmethod
     def register_name(self, address):
+        """
+        get the pretty name for the register at address
+        """
         try:
             reg_info = Device.register_info(address)
             dev_name = reg_info['device']._name
@@ -126,32 +134,53 @@ class Device(object):
 
     @classmethod
     def register_console_output_handler(cls, handler):
+        """
+        supply a handler for console output, will be called with a single byte at a time.
+        """
         Device._console_output_handler = handler
 
     @classmethod
     def register_console_input_handler(cls, handler):
+        """
+        supply a handler for console input, may be called with multiple bytes
+        """
         Device._console_input_handler = handler
 
     @classmethod
     def console_handle_output(cls, output):
+        """
+        send output to the console
+        """
         if Device._console_output_handler is not None:
             Device._console_output_handler(output)
 
     @classmethod
     def console_handle_input(cls, input):
+        """
+        take input from the console
+        """
         if Device._console_input_handler is not None:
             Device._console_input_handler(input)
 
     @property
     def current_time(self):
+        """
+        get the current time in microseconds
+        """
         return self._root_device._emu.current_time
 
     @property
     def current_cycle(self):
+        """
+        get the current time in CPU cycles
+        """
         return self._root_device._emu.current_cycle
 
     @property
     def cycle_rate(self):
+        """
+        get the CPU cycle rate in Hz
+        """
         return self._root_device._emu.cycle_rate
 
     @property
@@ -166,27 +195,11 @@ class Device(object):
     # Methods that should be implemented by device models
     #
 
-    def read(self, width, offset):
-        """
-        Called when a CPU read access decodes to one of the registers defined in a call to map_registers.
-        width is one of MEM_SIZE_8, MEM_SIZE_16 or MEM_SIZE_32
-        offset is the register offset from the device base address
-        Function should return the read value.
-        """
-        return 0
-
-    def write(self, width, offset, value):
-        """
-        Called when a CPU write access decodes to one of the registers defined in a call to map_registers.
-        width is one of MEM_SIZE_8, MEM_SIZE_16 or MEM_SIZE_32
-        offset is the register offset from the device base address
-        value is the value being written
-        """
-        pass
-
     def tick(self):
         """
-        Called every emulator tick
+        Called after any register access, or when the emulator finishes a quantum.
+        Can return a value (in cycles) indicating the time at which the device wants
+        to be called again, or zero if timely future attention is not required.
         """
         return 0
 
@@ -205,9 +218,9 @@ class Device(object):
 
     def get_vector(self, interrupt):
         """
-        Called during the interrupt acknowledge phase. Should return a programmed vector or
-        M68K_IRQ_AUTOVECTOR as appropriate if the device is interrupting, or M68K_IRQ_SPURIOUS
-        otherwise.
+        Called during the interrupt acknowledge phase. If the interrupt argument matches the
+        device IPL, should return a programmed vector or M68K_IRQ_AUTOVECTOR as appropriate if
+        the device is interrupting, or M68K_IRQ_SPURIOUS otherwise.
         """
         return M68K_IRQ_SPURIOUS
 
@@ -307,7 +320,7 @@ class RootDevice(Device):
                     Device._emu.trace('DEV_WRITE', address=address, info=str)
                 handler(value)
 
-            self.check_interrupts()
+            self._check_interrupts()
 
         except Exception as e:
             self._emu.fatal_exception(sys.exc_info())
@@ -323,24 +336,25 @@ class RootDevice(Device):
 
     def tick(self):
         self.trace('DEV', info='TICK')
-        deadline = None
         for dev in Device._devices:
-            ret = dev.tick()
-            # let the device request an earlier deadline
-            if ret is not None:
-                ret = int(ret)
-                if ret > 0:
-                    if deadline is None or ret < deadline:
-                        deadline = ret
+            new_quantum = dev.tick()
+            if new_quantum is None:
+                raise RuntimeError(f'{dev._name}.tick() returned None')
+            self._emu.set_quantum(new_quantum)
+        self._check_interrupts()
 
-        self.check_interrupts()
-        return deadline
+    def _tick_one(self, dev):
+        new_quantum = dev.tick()
+        if new_quantum is None:
+            raise RuntimeError(f'{dev._name}.tick() returned None')
+        self._emu.set_quantum(new_quantum)
+        self._check_interrupts()
 
     def reset(self, emu):
         for dev in Device._devices:
             dev.reset()
 
-    def check_interrupts(self):
+    def _check_interrupts(self):
         ipl = 0
         for dev in Device._devices:
             dev_ipl = dev.get_interrupt()
@@ -352,12 +366,17 @@ class RootDevice(Device):
             cpl = (SR >> 8) & 7
             if ipl > cpl:
                 self.trace(f'{interruptingDevice._name} asserts ipl {ipl}')
+                # emulator only checks for interrupts at the start of a timeslice
+                # or when SR is changed by the program, so if we have just asserted
+                # an unmasked interrupt we need to end the timeslice to get its
+                # attention
+                end_timeslice()
         set_irq(ipl)
 
 
 class SocketConsole(Device):
     def __init__(self, args, address, interrupt):
-        super(SocketConsole, self).__init__(args=args, name='console')
+        super(SocketConsole, self).__init__(args=args, name='socket-console')
 
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
@@ -379,6 +398,7 @@ class SocketConsole(Device):
         for key, mask in events:
             callback = key.data
             callback(key.fileobj, mask)
+        return 0
 
     def _recv(self, conn, mask):
         input = conn.recv(10)

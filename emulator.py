@@ -160,7 +160,7 @@ class Emulator(object):
         self._cpu_frequency = frequency
         self._elapsed_cycles = 0
         self._device_deadline = 0
-        self._quantum = int(self._cpu_frequency / 1000)  # ~1ms in cycles
+        self._default_quantum = int(self._cpu_frequency / 1000)  # ~1ms in cycles
 
         # reset callbacks
         self._reset_hooks = list()
@@ -287,10 +287,10 @@ class Emulator(object):
 
         self._start_time = time.time()
         while not self._dead:
-            cycles_to_run = self._root_device.tick()
-            if (cycles_to_run is None) or (cycles_to_run > self._quantum):
-                cycles_to_run = self._quantum
-            self._elapsed_cycles += execute(cycles_to_run)
+            self._next_quantum = self._default_quantum
+            self._root_device.tick()
+            self.trace('RUN', info=f'quantum {self._next_quantum} cycles')
+            self._elapsed_cycles += execute(self._next_quantum)
 
             if self._elapsed_cycles > self._cycle_limit:
                 self.fatal('cycle limit exceeded')
@@ -305,6 +305,10 @@ class Emulator(object):
             self._trace_file.close()
         except Exception:
             pass
+
+    def set_quantum(self, new_quantum):
+        if (new_quantum > 0) and (new_quantum < self._next_quantum):
+            self._next_quantum = new_quantum
 
     def add_memory(self, base, size, writable=True, contents=None):
         """
@@ -337,7 +341,7 @@ class Emulator(object):
         """
         Return the current time in microseconds since reset
         """
-        return int(self.current_cycle / self._cpu_frequency)
+        return int(self.current_cycle / self._cpu_frequency * 1000000)
 
     @property
     def current_cycle(self):
