@@ -2,6 +2,7 @@
  * Memory model for Musashi 4.x
  */
 
+#include <assert.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -127,27 +128,25 @@ mem_read(uint32_t address, uint32_t size)
             return ret;
         } else {
             mem_buffer_t *bp = mem_buffers + pte.id;
-            if (bp->buf) {
-                uint32_t offset = address - bp->base;
-                if ((offset + size) <= bp->size) {
-                    uint8_t *dp = bp->buf + offset;
-                    uint32_t ret = 0;
-                    switch (size) {
-                    case MEM_SIZE_32:
-                        ret = *dp++;
-                        ret = (ret << 8) + *dp++;
-                        // FALLTHROUGH
-                    case MEM_SIZE_16:
-                        ret = (ret << 8) + *dp++;
-                        // FALLTHROUGH
-                    case MEM_SIZE_8:
-                        ret = (ret << 8) + *dp;
-                        mem_trace(MEM_READ, address, size, ret);
-                        return ret;
-                    }
+            assert(bp->buf);
+            uint32_t offset = address - bp->base;
+            if ((offset + (size / 8)) <= bp->size) {
+                uint8_t *dp = bp->buf + offset;
+                uint32_t ret = 0;
+                switch (size) {
+                case MEM_SIZE_32:
+                    ret = *dp++;
+                    ret = (ret << 8) + *dp++;
+                    // FALLTHROUGH
+                case MEM_SIZE_16:
+                    ret = (ret << 8) + *dp++;
+                    // FALLTHROUGH
+                case MEM_SIZE_8:
+                    ret = (ret << 8) + *dp;
+                    mem_trace(MEM_READ, address, size, ret);
+                    return ret;
                 }
             }
-
         }
     }
     if (mem_bus_error_enabled) {
@@ -172,9 +171,10 @@ mem_write(uint32_t address, uint32_t size, uint32_t value)
             return;
         } else {
             mem_buffer_t *bp = mem_buffers + pte.id;
-            if (bp->buf && bp->writable) {
+            assert(bp->buf);
+            if (bp->writable) {
                 uint32_t offset = address - bp->base;
-                if ((offset + size) <= bp->size) {
+                if ((offset + (size / 8)) <= bp->size) {
                     uint8_t *dp = bp->buf + offset;
                     mem_trace(MEM_WRITE, address, size, value);
                     switch (size) {
@@ -191,12 +191,18 @@ mem_write(uint32_t address, uint32_t size, uint32_t value)
                     }
                 }
             }
-
         }
     }
     if (mem_bus_error_enabled) {
         m68k_pulse_bus_error();
     }
+    fprintf(stderr, "bad write 0x%x=0x%x: pte %svalid, %s, id %d\n", 
+            address,
+            value,
+            pte.valid ? "" : "in",
+            pte.device ? "dev" : "mem",
+            pte.id);
+    mem_dump_pagetable();
     mem_trace(INVALID_WRITE, address, size, value);
 }
 
@@ -343,7 +349,7 @@ mem_read_memory(uint32_t address, uint32_t size)
         mem_buffer_t *bp = mem_buffers + pte.id;
         if (bp->buf) {
             uint32_t offset = address - bp->base;
-            if ((offset + size) <= bp->size) {
+            if ((offset + (size / 8)) <= bp->size) {
                 uint8_t *dp = bp->buf + offset;
                 uint32_t ret = 0;
                 switch (size) {
@@ -374,7 +380,7 @@ mem_write_memory(uint32_t address, uint32_t size, uint32_t value)
         mem_buffer_t *bp = mem_buffers + pte.id;
         if (bp->buf) {
             uint32_t offset = address - bp->base;
-            if ((offset + size) <= bp->size) {
+            if ((offset + (size / 8)) <= bp->size) {
                 uint8_t *dp = bp->buf + offset;
                 switch (size) {
                 case MEM_SIZE_32:
