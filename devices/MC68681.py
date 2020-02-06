@@ -60,10 +60,10 @@ class Channel():
 
     def read_mr(self):
         if self._mrAlt:
-            return = self._mr2
+            return self._mr2
         else:
             self._mrAlt = True
-            return = self._mr1
+            return self._mr1
 
     def read_sr(self):
         return self._sr
@@ -124,7 +124,9 @@ class Channel():
         return 0
 
     def get_interrupts(self):
-
+        """
+        return possible interrupts (unmasked)
+        """
         interrupts = 0
         if self._sr & Channel.STATUS_TRANSMITTER_READY:
             interrupts |= Channel.INT_TXRDY
@@ -142,121 +144,6 @@ class Channel():
             self._rxfifo.append(c)
 
 
-class Counter():
-
-    MODE_MASK = 0x70
-    MODE_CTR_TXCA = 0x10
-    MODE_CTR_TXCB = 0x20
-    MODE_CTR_XTAL16 = 0x30
-    MODE_TMR_XTAL = 0x60
-    MODE_TMR_XTAL16 = 0x70
-    MODE_TMR = 0x40
-
-    def __init__(self, parent):
-        self._parent = parent
-        self._reload = 0x0001
-        self._interrupting = False
-        self._running = False
-        self._timer_deadline = 0
-
-        self.set_mode(Counter.MODE_TMR_XTAL16)
-        self._timer_epoch = self._parent.current_cycle
-
-    def read_cur(self):
-        self._update_status()
-        return self._count >> 8
-
-    def read_clr(self):
-        self._update_status()
-        return self._count & 0xff
-
-    def read_startcc(self):
-        if self._mode_is_counter:
-            self._running = True
-            self._counter_deadline = self._parent.current_cycle + self._reload * self._prescale
-        else:
-            self._timer_epoch = self._parent.current_cycle
-            self._timer_deadline = self._timer_epoch + self._timer_period
-        return 0xff
-
-    def read_stopcc(self):
-        if self._mode_is_counter:
-            self._update_status()
-            self._running = False
-        else:
-            current_cycle = self._parent.current_cycle
-            last_interrupt_cycle = current_cycle - (current_cycle % self._timer_period)
-            self._timer_deadline = last_interrupt_cycle + self._timer_period
-        self._interrupting = False
-        return 0xff
-
-    def write_acr(self, value):
-        mode = value & Counter.MODE_MASK
-        cycle_ratio = self._parent.cycle_rate / 3686400.0
-
-        if (mode == Counter.MODE_CTR_TXCA) or (mode == Counter.MODE_CTR_TXCB):
-            self._prescale = cycle_ratio * 96     # assume 38400bps
-        elif mode == Counter.MODE_CTR_XTAL16:
-            self._prescale = cycle_ratio * 16
-        elif mode == Counter.MODE_TMR_XTAL:
-            self._prescale = cycle_ratio * 1
-        elif mode == Counter.MODE_TMR_XTAL16:
-            self._prescale = cycle_ratio * 16
-        else:
-            raise RuntimeError('timer mode 0x{:02x} not supported'.format(mode))
-
-        self._mode = mode
-
-    def tick(self):
-        return self._update_status()
-
-    def write_ctlr(self, value):
-        self._reload = (self._reload & 0xff00) | value
-
-    def write_ctur(self, value):
-        self._reload = (self._reload & 0x00ff) | (value << 8)
-
-    def _update_status(self):
-        ret = None
-        current_cycle = self._parent.current_cycle
-        if self._mode_is_counter:
-            if current_cycle < self._counter_deadline:
-                cycles_remaining = self._counter_deadline - current_cycle
-                self._count = cycles_remaining / self._prescale
-                ret = int(cycles_remaining)
-            else:
-                cycles_past = current_cycle - self._counter_deadline
-                self._count = 0xffff - int((cycles_past / self._prescale) % 0x10000)
-                self._interrupting = True
-        else:
-            counts_elapsed = int((current_cycle - self._timer_epoch) / self._prescale)
-            self._count = self._reload - int(counts_elapsed % (self._reload + 1))
-
-            if current_cycle > self._timer_deadline:
-                self._interrupting = True
-                ret = self._timer_period
-            else:
-                ret = self._timer_deadline - current_cycle
-        return ret
-
-    @property
-    def is_interrupting(self):
-        self._update_status()
-        return self._interrupting
-
-    @property
-    def _mode_is_counter(self):
-        return not self._mode_is_timer
-
-    @property
-    def _mode_is_timer(self):
-        return self._mode & Counter.MODE_TMR
-
-    @property
-    def _timer_period(self):
-        return 2 * self._reload * self._prescale
-
-
 class MC68681(Device):
     """
     Emulation of the MC68681 DUART / timer device.
@@ -268,40 +155,15 @@ class MC68681(Device):
     REG_SEL_A = 0x00
     REG_SEL_B = 0x10
 
-    # non-channel registers
-    REG_IPCR = 0x09
-    REG_ACR = 0x09
-    REG_ISR = 0x0b
-    REG_IMR = 0x0b
-    REG_CUR = 0x0d
-    REG_CTUR = 0x0d
-    REG_CLR = 0x0f
-    REG_CTLR = 0x0f
-    REG_IVR = 0x19
-    REG_IPR = 0x1b
-    REG_OPCR = 0x1b
-    REG_STARTCC = 0x1d
-    REG_OPRSET = 0x1d
-    REG_STOPCC = 0x1f
-    REG_OPRCLR = 0x1f
+    IMR_COUNTER = 0x08
 
-    _registers = {
-        'MRA': 0x01,
-        'SRA/CSRA': 0x03,
-        'CRA': 0x05,
-        'RBA/TBA': 0x07,
-        'IPCR/ACR': 0x09,
-        'ISR/IMR': 0x0b,
-        'CUR/CTUR': 0x0d,
-        'CLR/CTLR': 0x0f,
-        'MRB': 0x11,
-        'SRB/CSRB': 0x13,
-        'RBB/TBB': 0x17,
-        'IVR': 0x19,
-        'IPR/OPCR': 0x1b,
-        'STARTCC/OPRSET': 0x1d,
-        'STOPCC/OPRCLR': 0x1f
-    }
+    MODE_MASK = 0x70
+    MODE_CTR_TXCA = 0x10
+    MODE_CTR_TXCB = 0x20
+    MODE_CTR_XTAL16 = 0x30
+    MODE_TMR_XTAL = 0x60
+    MODE_TMR_XTAL16 = 0x70
+    MODE_TMR = 0x40
 
     def __init__(self, args, address, interrupt):
         super(MC68681, self).__init__(args=args,
@@ -311,24 +173,23 @@ class MC68681(Device):
 
         self._a = Channel(self, args.duart_console_port == 'A')
         self._b = Channel(self, args.duart_console_port == 'B')
-        self._counter = Counter(self)
         self.add_registers([
-            ('MRA',            0x01, MEM_SIZE_8, self._a.read_mr,            self._a.write_mr),
-            ('SRA/CSRA',       0x03, MEM_SIZE_8, self._a.read_sr,            self._a.write_csr),
-            ('CRA',            0x05, MEM_SIZE_8, self._a.read_cr,            self._a.write_cr),
-            ('RBA/TBA',        0x07, MEM_SIZE_8, self._a.read_rb,            self._a.write_tb),
-            ('IPCR/ACR',       0x09, MEM_SIZE_8, self._read_ipcr,            self._counter.write_acr),
-            ('ISR/IMR',        0x0b, MEM_SIZE_8, self._read_isr,             self._write_imr),
-            ('CUR/CTUR',       0x0d, MEM_SIZE_8, self._counter.read_cur,     self._counter.write_ctur),
-            ('CLR/CTLR',       0x0f, MEM_SIZE_8, self._counter.read_clr,     self._counter.write_ctlr),
-            ('MRB',            0x11, MEM_SIZE_8, self._b.read_mr,            self._b.write_mr),
-            ('SRB/CSRB',       0x13, MEM_SIZE_8, self._b.read_sr,            self._b.write_csr),
-            ('CRB',            0x15, MEM_SIZE_8, self._b.read_cr,            self._b.write_cr),
-            ('RBB/TBB',        0x17, MEM_SIZE_8, self._b.read_rb,            self._b.write_tb),
-            ('IVR',            0x19, MEM_SIZE_8, self._read_ivr,             self._write_ivr),
-            ('IPR/OPCR',       0x1b, MEM_SIZE_8, self._read_ipr,             self._write_nop),
-            ('STARTCC/OPRSET', 0x1d, MEM_SIZE_8, self._counter.read_startcc, self._write_nop),
-            ('STOPCC/OPRCLR',  0x1f, MEM_SIZE_8, self._counter.read_stopcc,  self._write_nop),
+            ('MRA',            0x01, MEM_SIZE_8, self._a.read_mr,    self._a.write_mr),
+            ('SRA/CSRA',       0x03, MEM_SIZE_8, self._a.read_sr,    self._a.write_csr),
+            ('CRA',            0x05, MEM_SIZE_8, self._read_nop,     self._a.write_cr),
+            ('RBA/TBA',        0x07, MEM_SIZE_8, self._a.read_rb,    self._a.write_tb),
+            ('IPCR/ACR',       0x09, MEM_SIZE_8, self._read_ipcr,    self._write_acr),
+            ('ISR/IMR',        0x0b, MEM_SIZE_8, self._read_isr,     self._write_imr),
+            ('CUR/CTUR',       0x0d, MEM_SIZE_8, self._read_cur,     self._write_ctur),
+            ('CLR/CTLR',       0x0f, MEM_SIZE_8, self._read_clr,     self._write_ctlr),
+            ('MRB',            0x11, MEM_SIZE_8, self._b.read_mr,    self._b.write_mr),
+            ('SRB/CSRB',       0x13, MEM_SIZE_8, self._b.read_sr,    self._b.write_csr),
+            ('CRB',            0x15, MEM_SIZE_8, self._read_nop,     self._b.write_cr),
+            ('RBB/TBB',        0x17, MEM_SIZE_8, self._b.read_rb,    self._b.write_tb),
+            ('IVR',            0x19, MEM_SIZE_8, self._read_ivr,     self._write_ivr),
+            ('IPR/OPCR',       0x1b, MEM_SIZE_8, self._read_ipr,     self._write_nop),
+            ('STARTCC/OPRSET', 0x1d, MEM_SIZE_8, self._read_startcc, self._write_nop),
+            ('STOPCC/OPRCLR',  0x1f, MEM_SIZE_8, self._read_stopcc,  self._write_nop),
         ])
         self.reset()
 
@@ -345,7 +206,7 @@ class MC68681(Device):
         return 0x03  # CTSA/CTSB are always asserted
 
     def _read_isr(self):
-        self._update_status()
+        self.tick()
         return self._isr
 
     def _read_ivr(self):
@@ -354,6 +215,40 @@ class MC68681(Device):
     def _read_ipr(self):
         return 0x03  # CTSA/CTSB are always asserted
 
+    def _read_cur(self):
+        self._update_counter()
+        return self._count >> 8
+
+    def _read_clr(self):
+        self._update_counter()
+        return self._count & 0xff
+
+    def _read_startcc(self):
+        if self._mode_is_counter:
+            self._counter_running = True
+            self._counter_interrupting = False
+            self._counter_deadline = self.current_cycle + self._reload * self._prescale
+        else:
+            self._timer_epoch = self.current_cycle
+            self._timer_deadline = self._timer_epoch + self._timer_period
+
+        return 0xff
+
+    def _read_stopcc(self):
+        if self._mode_is_counter:
+            self._update_counter()
+            self._counter_running = False
+        else:
+            current_cycle = self.current_cycle
+            last_interrupt_cycle = current_cycle - (current_cycle % self._timer_period)
+            self._timer_deadline = last_interrupt_cycle + self._timer_period
+
+        self._counter_interrupting = False
+        return 0xff
+
+    def _read_nop(self):
+        pass
+
     def _write_imr(self, value):
         self._imr = value
         # XXX interrupt status may have changed...
@@ -361,18 +256,47 @@ class MC68681(Device):
     def _write_ivr(self, value):
         self._ivr = value
 
+    def _write_acr(self, value):
+        mode = value & self.MODE_MASK
+        cycle_ratio = self.cycle_rate / 3686400.0
+
+        if (mode == self.MODE_CTR_TXCA) or (mode == self.MODE_CTR_TXCB):
+            self._prescale = cycle_ratio * 96     # assume 38400bps
+        elif mode == self.MODE_CTR_XTAL16:
+            self._prescale = cycle_ratio * 16
+        elif mode == self.MODE_TMR_XTAL:
+            self._prescale = cycle_ratio * 1
+        elif mode == self.MODE_TMR_XTAL16:
+            self._prescale = cycle_ratio * 16
+        else:
+            raise RuntimeError('timer mode 0x{:02x} not supported'.format(mode))
+
+        self._mode = mode
+
+    def _write_ctlr(self, value):
+        self._reload = (self._reload & 0xff00) | value
+
+    def _write_ctur(self, value):
+        self._reload = (self._reload & 0x00ff) | (value << 8)
+
     def _write_nop(self, value):
         pass
 
     def tick(self):
-        cq = self._counter.tick()
-        aq = self._a.tick()
-        bq = self._b.tick()
+        self._isr &= ~0x3b
 
-        for q in [cq, aq, bq].sorted():
-            if q > 0:
-                break
-        return q
+        self._a.tick()
+        self._isr |= self._a.get_interrupts()
+        self._b.tick()
+        self._isr |= self._b.get_interrupts() << 4
+
+        counter_quantum = self._update_counter()
+        if self._counter_interrupting:
+            self._isr |= 0x08
+
+        if self._imr & self.IMR_COUNTER:
+            return counter_quantum
+        return 0
 
     def reset(self):
         self._a.reset()
@@ -380,24 +304,64 @@ class MC68681(Device):
         self._isr = 0
         self._imr = 0
         self._ivr = 0xf
-        self._count = 0
-        self._countReload = 0xffff
+        self._reload = 0x0001
+        self._counter_interrupting = False
+        self._counter_running = False
+        self._timer_deadline = 0
+        self._write_acr(self.MODE_TMR_XTAL16)
+        self._timer_epoch = self.current_cycle
 
     def get_interrupt(self):
-        self._update_status()
-        if self._isr & self._imr:
+        if self._is_interrupting:
             return self._interrupt
         return 0
 
     def get_vector(self, interrupt):
-        if interrupt == self._interrupt:
-            if self._isr & self._imr:
-                return self._ivr
+        if (interrupt == self._interrupt) and self._is_interrupting:
+            return self._ivr
         return M68K_IRQ_SPURIOUS
 
-    def _update_status(self):
-        self._isr &= ~0x3b
-        if self._counter.is_interrupting:
-            self._isr |= 0x08
-        self._isr |= self._a.get_interrupts()
-        self._isr |= self._b.get_interrupts() << 4
+    def _update_counter(self):
+        ret = 0
+        current_cycle = self.current_cycle
+        if self._mode_is_counter:
+            if self._counter_running:
+                if current_cycle < self._counter_deadline:
+                    cycles_remaining = self._counter_deadline - current_cycle
+                    self._count = cycles_remaining / self._prescale
+                    ret = int(cycles_remaining)
+                else:
+                    cycles_past = current_cycle - self._counter_deadline
+                    self._count = 0xffff - ((cycles_past / self._prescale) % 0x10000)
+                    self._counter_interrupting = True
+        else:
+            counts_elapsed = int((current_cycle - self._timer_epoch) / self._prescale)
+            self._count = self._reload - (counts_elapsed % (self._reload + 1))
+
+            if current_cycle > self._timer_deadline:
+                self._counter_interrupting = True
+            else:
+                ret = self._timer_deadline - current_cycle
+
+        return int(ret)
+
+    @property
+    def _is_interrupting(self):
+        return (self._isr & self._imr) != 0
+
+    @property
+    def is_counter_interrupting(self):
+        self._update_status()
+        return self._counter_interrupting
+
+    @property
+    def _mode_is_counter(self):
+        return not self._mode_is_timer
+
+    @property
+    def _mode_is_timer(self):
+        return self._mode & self.MODE_TMR
+
+    @property
+    def _timer_period(self):
+        return 2 * self._reload * self._prescale

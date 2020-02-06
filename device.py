@@ -65,6 +65,7 @@ class Device(object):
         """Common arguments applying to all devices"""
         parser.add_argument('--debug-device',
                             action='append',
+                            default=list(),
                             metavar='DEVICE-NAME',
                             help='enable debugging for DEVICE-NAME, \'Device\''
                             ' to trace device framework.')
@@ -334,10 +335,12 @@ class RootDevice(Device):
                 raise RuntimeError(f"could not map device @ 0x{address:x}/{size}")
         Device._devices.append(new_dev)
 
-    def tick(self):
+    def tick_all(self):
         self.trace('DEV', info='TICK')
         for dev in Device._devices:
             new_quantum = dev.tick()
+            if not isinstance(new_quantum, int):
+                raise RuntimeError(f'device {dev._name} tick returned {type(new_quantum).__qualname__} {new_quantum}')
             if new_quantum is None:
                 raise RuntimeError(f'{dev._name}.tick() returned None')
             self._emu.set_quantum(new_quantum)

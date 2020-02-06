@@ -288,7 +288,7 @@ class Emulator(object):
         self._start_time = time.time()
         while not self._dead:
             self._next_quantum = self._default_quantum
-            self._root_device.tick()
+            self._root_device.tick_all()
             self.trace('RUN', info=f'quantum {self._next_quantum} cycles')
             self._elapsed_cycles += execute(self._next_quantum)
 

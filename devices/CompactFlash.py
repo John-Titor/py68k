@@ -54,7 +54,6 @@ class CompactFlash(Device):
             ('DRIVE/HEAD',     0x0d, MEM_SIZE_8,  self._read_drive_head,    self._write_drive_head),
             ('STATUS/COMMAND', 0x0f, MEM_SIZE_8,  self._read_status,        self._write_command),
         ])
-        self.map_registers(cf_registers)
 
         # open the backing file
         if args.diskfile is not None:
