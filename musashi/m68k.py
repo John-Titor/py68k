@@ -188,7 +188,7 @@ def cycles_run():
 
 
 def cycles_remaining():
-    return lib.m68k_cycles_remaining_func()
+    return lib.m68k_cycles_remaining()
 
 
 def modify_timeslice(cycles):

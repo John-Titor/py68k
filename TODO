@@ -37,6 +37,7 @@ Devices:
     ✔ scrub devices : don't allow tick to return None @done (20-02-04 23:08)
   ☐ option to en/disable buserror generation
   ☐ console input should cause tick
+  ☐ better handling of deadlines returned by tick - perhaps track a per-device deadline rather than just the lowest from the most recent poll? device register accesses can cause deadlines to be lost...
   I2C:
     ☐ generic I2C 'bus'
     ☐ DS1232 RTC

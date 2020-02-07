@@ -322,14 +322,14 @@ class MC68681(Device):
         return M68K_IRQ_SPURIOUS
 
     def _update_counter(self):
-        ret = 0
+        self.tick_deadline = 0
         current_cycle = self.current_cycle
         if self._mode_is_counter:
             if self._counter_running:
                 if current_cycle < self._counter_deadline:
                     cycles_remaining = self._counter_deadline - current_cycle
                     self._count = cycles_remaining / self._prescale
-                    ret = int(cycles_remaining)
+                    self.tick_deadline = self._counter_deadline
                 else:
                     cycles_past = current_cycle - self._counter_deadline
                     self._count = 0xffff - ((cycles_past / self._prescale) % 0x10000)
@@ -341,9 +341,7 @@ class MC68681(Device):
             if current_cycle > self._timer_deadline:
                 self._counter_interrupting = True
             else:
-                ret = self._timer_deadline - current_cycle
-
-        return int(ret)
+                self.tick_deadline = self._timer_deadline
 
     @property
     def _is_interrupting(self):

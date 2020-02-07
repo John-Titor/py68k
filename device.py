@@ -57,8 +57,9 @@ class Device(object):
         self._address = address
         self._size = 0
         self._interrupt = interrupt
-
         self._debug = self._name in args.debug_device
+
+        self.tick_deadline = 0
 
     @classmethod
     def add_arguments(cls, parser):
@@ -199,8 +200,8 @@ class Device(object):
     def tick(self):
         """
         Called after any register access, or when the emulator finishes a quantum.
-        Can return a value (in cycles) indicating the time at which the device wants
-        to be called again, or zero if timely future attention is not required.
+        Driver may set the tick_deadline property, indicating a desire to be
+        called again at or shortly after that cycle.
         """
         return 0
 
@@ -338,20 +339,14 @@ class RootDevice(Device):
     def tick_all(self):
         self.trace('DEV', info='TICK')
         for dev in Device._devices:
-            new_quantum = dev.tick()
-            if not isinstance(new_quantum, int):
-                raise RuntimeError(f'device {dev._name} tick returned {type(new_quantum).__qualname__} {new_quantum}')
-            if new_quantum is None:
-                raise RuntimeError(f'{dev._name}.tick() returned None')
-            self._emu.set_quantum(new_quantum)
+            dev.tick()
         self._check_interrupts()
+        self._schedule_next_tick()
 
     def _tick_one(self, dev):
-        new_quantum = dev.tick()
-        if new_quantum is None:
-            raise RuntimeError(f'{dev._name}.tick() returned None')
-        self._emu.set_quantum(new_quantum)
+        dev.tick()
         self._check_interrupts()
+        self._schedule_next_tick()
 
     def reset(self, emu):
         for dev in Device._devices:
@@ -375,6 +370,14 @@ class RootDevice(Device):
                 # attention
                 end_timeslice()
         set_irq(ipl)
+
+    def _schedule_next_tick(self):
+        earliest_deadline = sys.maxsize
+        for dev in Device._devices:
+            deadline_candidate = dev.tick_deadline
+            if (deadline_candidate > 0) and (deadline_candidate < earliest_deadline):
+                earliest_deadline = deadline_candidate
+        self._emu.schedule_device_tick(earliest_deadline)
 
 
 class SocketConsole(Device):

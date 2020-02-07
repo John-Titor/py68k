@@ -55,6 +55,7 @@ from musashi.m68k import (
     cpu_init,
     disassemble,
     cycles_run,
+    cycles_remaining,
     end_timeslice,
     execute,
     get_reg,
@@ -161,6 +162,7 @@ class Emulator(object):
         self._elapsed_cycles = 0
         self._device_deadline = 0
         self._default_quantum = int(self._cpu_frequency / 1000)  # ~1ms in cycles
+        self._device_tick_deadline = 0
 
         # reset callbacks
         self._reset_hooks = list()
@@ -287,10 +289,15 @@ class Emulator(object):
 
         self._start_time = time.time()
         while not self._dead:
-            self._next_quantum = self._default_quantum
             self._root_device.tick_all()
-            self.trace('RUN', info=f'quantum {self._next_quantum} cycles')
-            self._elapsed_cycles += execute(self._next_quantum)
+
+            quantum = self._default_quantum
+            if self._device_tick_deadline > self._elapsed_cycles:
+                if (self._elapsed_cycles + quantum) > self._device_tick_deadline:
+                    quantum = self._device_tick_deadline - self._elapsed_cycles
+
+            self.trace('RUN', info=f'quantum {quantum} cycles')
+            self._elapsed_cycles += execute(quantum)
 
             if self._elapsed_cycles > self._cycle_limit:
                 self.fatal('cycle limit exceeded')
@@ -305,6 +312,11 @@ class Emulator(object):
             self._trace_file.close()
         except Exception:
             pass
+
+    def schedule_device_tick(self, deadline):
+        self._device_tick_deadline = deadline
+        if (self.current_cycle + cycles_remaining()) > deadline:
+            modify_timeslice(deadline - self.current_cycle)
 
     def set_quantum(self, new_quantum):
         if (new_quantum > 0) and (new_quantum < self._next_quantum):

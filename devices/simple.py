@@ -43,9 +43,7 @@ class UART(Device):
         pass
 
     def _read_sr(self):
-        value = 0
-        if self._can_tx:
-            value |= UART.SR_TXRDY
+        value = UART.SR_TXRDY
         if len(self._rxfifo) > 0:
             value |= UART.SR_RXRDY
         return value
@@ -56,10 +54,8 @@ class UART(Device):
         return 0
 
     def _write_dr(self, value):
-        if self._can_tx:
-            if self._unit == 0:
-                self.console_handle_output(chr(value).encode('latin-1'))
-            self._last_tx_cycle = self.current_cycle
+        if self._unit == 0:
+            self.console_handle_output(chr(value).encode('latin-1'))
 
     def _read_cr(self):
         return self._cr
@@ -77,7 +73,6 @@ class UART(Device):
         self._rxfifo = deque()
         self._vr = 0
         self._cr = 0
-        self._last_tx_cycle = 0
 
     def get_interrupt(self):
         if self._interrupting:
@@ -92,13 +87,8 @@ class UART(Device):
         return M68K_IRQ_SPURIOUS
 
     @property
-    def _can_tx(self):
-        # pace transmit to one character every 1000 cycles
-        return self.current_cycle > (self._last_tx_cycle + 1000)
-
-    @property
     def _interrupting(self):
-        if (self._cr & UART.CR_TX_INTEN) and self._can_tx:
+        if (self._cr & UART.CR_TX_INTEN):
             return True
         if (self._cr & UART.CR_RX_INTEN) and len(self._rxfifo) > 0:
             return True
@@ -126,6 +116,7 @@ class Timer(Device):
             ('CONTROL', 0x09, MEM_SIZE_8,  self._read_control, self._write_control),
             ('VECTOR',  0x0b, MEM_SIZE_8,  self._read_vector,  self._write_vector),
         ])
+        self._divisor = int(self.cycle_rate / 1000000)  # 1MHz base clock
         self.reset()
 
     @classmethod
@@ -133,63 +124,69 @@ class Timer(Device):
         pass
 
     def _read_period(self):
-        return self._period
-
-    def _write_period(self, value):
-        self._period = value
-        self._count = self._period
-        self._epoch = self.current_cycle
-        self._last_intr = self._epoch
+        return self._r_period
 
     def _read_count(self):
         self.tick()
-        return self._count
+        return self._r_count
 
     def _read_control(self):
-        return self._control
-
-    def _write_control(self, value):
-        self._control = value
+        return self._r_control
 
     def _read_vector(self):
-        return self._vector
+        return self._r_vector
+
+    def _write_period(self, value):
+        self._r_period = value
+        self._r_count = 0
+        self._period = (self._r_period + 1) * self._divisor
+        self._epoch = self.current_cycle
+        self._last_iack = self._epoch
+        self._interrupting = False
+
+    def _write_control(self, value):
+        self._r_control = value
 
     def _write_vector(self, value):
-        self._control = value
+        self._r_vector = value
 
     def tick(self):
+        self.tick_deadline = 0
         # do nothing if we are disabled
-        if self._period != 0:
-            self._count = int((self.current_cycle - self._epoch) / self._divisor) % self._divisor
-            if self._control & Timer.CONTROL_INTEN:
-                return (self._period - self._count) * self._divisor
-        return 0
+        count = self.current_cycle - self._epoch
+        self._r_count = int((count % self._period) / self._divisor)
+
+        if self._r_control & Timer.CONTROL_INTEN:
+            if not self._interrupting:
+                iack_loop = int(self._last_iack / self._period)
+                this_loop = int(self.current_cycle / self._period)
+                if this_loop > iack_loop:
+                    self._interrupting = true
+                else:
+                    self.tick_deadline = (this_loop + 1) * self._period
+        else:
+            self._interrupting = False
 
     def reset(self):
-        self._divisor = int(self.cycle_rate / 1000000)  # 1MHz base clock
-        self._period = 0
-        self._count = 0
-        self._control = 0
-        self._vector = 0
+        self._r_period = 0
+        self._r_count = 0
+        self._r_control = 0
+        self._r_vector = 0
         self._epoch = 0
-        self._last_intr = 0
+        self._period = self._divisor
+        self._last_iack = 0
 
     def get_interrupt(self):
+        self.tick()
         if self._interrupting:
             return self._interrupt
         return 0
 
     def get_vector(self, interrupt):
         if self._interrupting and (interrupt == self._interrupt):
+            self._last_iack = self.current_cycle
+            self._interrupting = False
             if self._vector > 0:
                 return self._vector
             return M68K_IRQ_AUTOVECTOR
         return M68K_IRQ_SPURIOUS
-
-    @property
-    def _interrupting(self):
-        if not (self._control & Timer.CONTROL_INTEN):
-            return False
-        if not (self._last_intr + (self._period * self._divisor)) > self.current_cycle:
-            return False
-        return True
