@@ -1,13 +1,7 @@
 from device import Device
 from collections import deque
 
-from musashi.m68k import (
-    M68K_IRQ_SPURIOUS,
-    M68K_IRQ_AUTOVECTOR,
-    MEM_SIZE_8,
-    MEM_SIZE_16,
-    MEM_SIZE_32,
-)
+from musashi import m68k
 
 
 class UART(Device):
@@ -27,10 +21,10 @@ class UART(Device):
         super(UART, self).__init__(args=args, name='uart',
                                    address=address, interrupt=interrupt)
         self.add_registers([
-            ('SR', 0x01, MEM_SIZE_8, self._read_sr, None),
-            ('DR', 0x03, MEM_SIZE_8, self._read_dr, self._write_dr),
-            ('CR', 0x05, MEM_SIZE_8, self._read_cr, self._write_cr),
-            ('VR', 0x06, MEM_SIZE_8, self._read_vr, self._write_vr),
+            ('SR', 0x01, m68k.MEM_SIZE_8, self._read_sr, None),
+            ('DR', 0x03, m68k.MEM_SIZE_8, self._read_dr, self._write_dr),
+            ('CR', 0x05, m68k.MEM_SIZE_8, self._read_cr, self._write_cr),
+            ('VR', 0x06, m68k.MEM_SIZE_8, self._read_vr, self._write_vr),
         ])
         self.reset()
         self._unit = UART._unit
@@ -83,8 +77,8 @@ class UART(Device):
         if self._interrupting and (interrupt == self._interrupt):
             if self._vr > 0:
                 return self._vr
-            return M68K_IRQ_AUTOVECTOR
-        return M68K_IRQ_SPURIOUS
+            return m68k.IRQ_AUTOVECTOR
+        return m68k.IRQ_SPURIOUS
 
     @property
     def _interrupting(self):
@@ -111,10 +105,10 @@ class Timer(Device):
                                     address=address, interrupt=interrupt)
 
         self.add_registers([
-            ('PERIOD',  0x00, MEM_SIZE_32, self._read_period,  self._write_period),
-            ('COUNT',   0x04, MEM_SIZE_32, self._read_count,   None),
-            ('CONTROL', 0x09, MEM_SIZE_8,  self._read_control, self._write_control),
-            ('VECTOR',  0x0b, MEM_SIZE_8,  self._read_vector,  self._write_vector),
+            ('PERIOD',  0x00, m68k.MEM_SIZE_32, self._read_period,  self._write_period),
+            ('COUNT',   0x04, m68k.MEM_SIZE_32, self._read_count,   None),
+            ('CONTROL', 0x09, m68k.MEM_SIZE_8,  self._read_control, self._write_control),
+            ('VECTOR',  0x0b, m68k.MEM_SIZE_8,  self._read_vector,  self._write_vector),
         ])
         self._divisor = int(self.cycle_rate / 1000000)  # 1MHz base clock
         self.reset()
@@ -188,5 +182,5 @@ class Timer(Device):
             self._interrupting = False
             if self._vector > 0:
                 return self._vector
-            return M68K_IRQ_AUTOVECTOR
-        return M68K_IRQ_SPURIOUS
+            return m68k.IRQ_AUTOVECTOR
+        return m68k.IRQ_SPURIOUS

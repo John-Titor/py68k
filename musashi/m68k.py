@@ -11,66 +11,69 @@ from ctypes import *
 # --- Constants ---
 
 # cpu type
-M68K_CPU_TYPE_INVALID = 0
-M68K_CPU_TYPE_68000 = 1
-M68K_CPU_TYPE_68010 = 2
-M68K_CPU_TYPE_68EC020 = 3
-M68K_CPU_TYPE_68020 = 4
-M68K_CPU_TYPE_68EC030 = 5
-M68K_CPU_TYPE_68030 = 6
-M68K_CPU_TYPE_68EC040 = 7
-M68K_CPU_TYPE_68LC040 = 8
-M68K_CPU_TYPE_68040 = 9
-M68K_CPU_TYPE_SCC68070 = 10
+CPU_TYPE_INVALID = 0
+CPU_TYPE_68000 = 1
+CPU_TYPE_68010 = 2
+CPU_TYPE_68EC020 = 3
+CPU_TYPE_68020 = 4
+CPU_TYPE_68EC030 = 5
+CPU_TYPE_68030 = 6
+CPU_TYPE_68EC040 = 7
+CPU_TYPE_68LC040 = 8
+CPU_TYPE_68040 = 9
+CPU_TYPE_SCC68070 = 10
 
 
 # registers
-M68K_REG_D0 = 0
-M68K_REG_D1 = 1
-M68K_REG_D2 = 2
-M68K_REG_D3 = 3
-M68K_REG_D4 = 4
-M68K_REG_D5 = 5
-M68K_REG_D6 = 6
-M68K_REG_D7 = 7
-M68K_REG_A0 = 8
-M68K_REG_A1 = 9
-M68K_REG_A2 = 10
-M68K_REG_A3 = 11
-M68K_REG_A4 = 12
-M68K_REG_A5 = 13
-M68K_REG_A6 = 14
-M68K_REG_A7 = 15
-M68K_REG_PC = 16  # Program Counter
-M68K_REG_SR = 17  # Status Register
-M68K_REG_SP = 18  # The current Stack Pointer (located in A7)
-M68K_REG_USP = 19  # User Stack Pointer
-M68K_REG_ISP = 20  # Interrupt Stack Pointer
-M68K_REG_MSP = 21  # Master Stack Pointer
-M68K_REG_SFC = 22  # Source Function Code
-M68K_REG_DFC = 23  # Destination Function Code
-M68K_REG_VBR = 24  # Vector Base Register
-M68K_REG_CACR = 25  # Cache Control Register
-M68K_REG_CAAR = 26  # Cache Address Register
+REG_D0 = 0
+REG_D1 = 1
+REG_D2 = 2
+REG_D3 = 3
+REG_D4 = 4
+REG_D5 = 5
+REG_D6 = 6
+REG_D7 = 7
+REG_A0 = 8
+REG_A1 = 9
+REG_A2 = 10
+REG_A3 = 11
+REG_A4 = 12
+REG_A5 = 13
+REG_A6 = 14
+REG_A7 = 15
+REG_PC = 16  # Program Counter
+REG_SR = 17  # Status Register
+REG_SP = 18  # The current Stack Pointer (located in A7)
+REG_USP = 19  # User Stack Pointer
+REG_ISP = 20  # Interrupt Stack Pointer
+REG_MSP = 21  # Master Stack Pointer
+REG_SFC = 22  # Source Function Code
+REG_DFC = 23  # Destination Function Code
+REG_VBR = 24  # Vector Base Register
+REG_CACR = 25  # Cache Control Register
+REG_CAAR = 26  # Cache Address Register
 
-M68K_REG_PREF_ADDR = 27  # Virtual Reg: Last prefetch address
-M68K_REG_PREF_DATA = 28  # Virtual Reg: Last prefetch data
+REG_PREF_ADDR = 27  # Virtual Reg: Last prefetch address
+REG_PREF_DATA = 28  # Virtual Reg: Last prefetch data
 
-M68K_REG_PPC = 29  # Previous value in the program counter
-M68K_REG_IR = 30  # Instruction register
-M68K_REG_CPU_TYPE = 31  # Type of CPU being run
+REG_PPC = 29  # Previous value in the program counter
+REG_IR = 30  # Instruction register
+REG_CPU_TYPE = 31  # Type of CPU being run
+
+ILLG_OK = 1     # illegal instruction callback - insn OK
+ILLG_ERROR = 0  # illegal instruction callback - insn illeal
 
 # interrupts
-M68K_IRQ_AUTOVECTOR = 0xffffffff
-M68K_IRQ_SPURIOUS = 0xfffffffe
-M68K_IRQ_NONE = 0
-M68K_IRQ_1 = 1
-M68K_IRQ_2 = 2
-M68K_IRQ_3 = 3
-M68K_IRQ_4 = 4
-M68K_IRQ_5 = 5
-M68K_IRQ_6 = 6
-M68K_IRQ_7 = 7
+IRQ_AUTOVECTOR = 0xffffffff
+IRQ_SPURIOUS = 0xfffffffe
+IRQ_NONE = 0
+IRQ_1 = 1
+IRQ_2 = 2
+IRQ_3 = 3
+IRQ_4 = 4
+IRQ_5 = 5
+IRQ_6 = 6
+IRQ_7 = 7
 
 MEM_PAGE_SIZE = 4096
 MEM_PAGE_MASK = MEM_PAGE_SIZE - 1

@@ -1,13 +1,9 @@
 import sys
 import io
 import struct
-from device import Device
-from musashi.m68k import (
-    MEM_SIZE_8,
-    MEM_SIZE_16,
-    MEM_SIZE_32,
-)
 
+from device import Device
+from musashi import m68k
 
 SECTOR_SIZE = 512
 
@@ -44,15 +40,15 @@ class CompactFlash(Device):
     def __init__(self, args, address, interrupt):
         super(CompactFlash, self).__init__(args=args, name='CF', address=address)
         self.add_registers([
-            ('DATA16',         0x00, MEM_SIZE_16, self._read_data16,        self._write_data16),
-            ('DATA8',          0x01, MEM_SIZE_8,  self._read_data8,         self._write_data8),
-            ('ERROR/FEATURE',  0x03, MEM_SIZE_8,  self._read_error,         self._write_feature),
-            ('SECTOR_COUNT',   0x05, MEM_SIZE_8,  self._read_sector_count,  self._write_sector_count),
-            ('SECTOR_NUMBER',  0x07, MEM_SIZE_8,  self._read_sector_number, self._write_sector_number),
-            ('CYLINDER_LOW',   0x09, MEM_SIZE_8,  self._read_cylinder_low,  self._write_cylinder_low),
-            ('CYLINDER_HIGH',  0x0b, MEM_SIZE_8,  self._read_cylinder_high, self._write_cylinder_high),
-            ('DRIVE/HEAD',     0x0d, MEM_SIZE_8,  self._read_drive_head,    self._write_drive_head),
-            ('STATUS/COMMAND', 0x0f, MEM_SIZE_8,  self._read_status,        self._write_command),
+            ('DATA16',         0x00, m68k.MEM_SIZE_16, self._read_data16,        self._write_data16),
+            ('DATA8',          0x01, m68k.MEM_SIZE_8,  self._read_data8,         self._write_data8),
+            ('ERROR/FEATURE',  0x03, m68k.MEM_SIZE_8,  self._read_error,         self._write_feature),
+            ('SECTOR_COUNT',   0x05, m68k.MEM_SIZE_8,  self._read_sector_count,  self._write_sector_count),
+            ('SECTOR_NUMBER',  0x07, m68k.MEM_SIZE_8,  self._read_sector_number, self._write_sector_number),
+            ('CYLINDER_LOW',   0x09, m68k.MEM_SIZE_8,  self._read_cylinder_low,  self._write_cylinder_low),
+            ('CYLINDER_HIGH',  0x0b, m68k.MEM_SIZE_8,  self._read_cylinder_high, self._write_cylinder_high),
+            ('DRIVE/HEAD',     0x0d, m68k.MEM_SIZE_8,  self._read_drive_head,    self._write_drive_head),
+            ('STATUS/COMMAND', 0x0f, m68k.MEM_SIZE_8,  self._read_status,        self._write_command),
         ])
 
         # open the backing file
@@ -151,10 +147,10 @@ class CompactFlash(Device):
                             help='CF disk image file')
 
     def _read_data16(self):
-        return self._io_read(MEM_SIZE_16)
+        return self._io_read(m68k.MEM_SIZE_16)
 
     def _read_data8(self):
-        return self._io_read(MEM_SIZE_8)
+        return self._io_read(m68k.MEM_SIZE_8)
 
     def _read_error(self):
         return self._r_error
@@ -178,10 +174,10 @@ class CompactFlash(Device):
         return self._r_status
 
     def _write_data16(self, value):
-        self._io_write(MEM_SIZE_16, value)
+        self._io_write(m68k.MEM_SIZE_16, value)
 
     def _write_data8(self, value):
-        self._io_write(MEM_SIZE_8, value)
+        self._io_write(m68k.MEM_SIZE_8, value)
 
     def _write_feature(self, value):
         self._r_feature = value
@@ -263,7 +259,7 @@ class CompactFlash(Device):
             self.trace('IOERR', 'data read when not reading / identifying')
             return 0
 
-        if width == MEM_SIZE_8:
+        if width == m68k.MEM_SIZE_8:
             count = 1
         else:
             count = 2
@@ -301,7 +297,7 @@ class CompactFlash(Device):
 
         data = bytearray()
         data.append(value & 0xff)
-        if width == MEM_SIZE_16:
+        if width == m68k.MEM_SIZE_16:
             data.append(value >> 8)
 
         if self._bytes_remaining < len(data):

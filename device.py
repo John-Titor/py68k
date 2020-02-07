@@ -3,29 +3,7 @@ import os
 import socket
 import selectors
 
-from musashi.m68k import (
-    # Musashi API
-    end_timeslice,
-    M68K_REG_SR,
-    M68K_IRQ_SPURIOUS,
-    M68K_IRQ_AUTOVECTOR,
-
-    set_int_ack_callback,
-    set_irq,
-    get_reg,
-    pulse_bus_error,
-
-    # Memory API
-    MEM_PAGE_MASK,
-    MEM_READ,
-    MEM_WRITE,
-    MEM_SIZE_8,
-    MEM_SIZE_16,
-    MEM_SIZE_32,
-
-    mem_add_device,
-    mem_set_device_handler,
-)
+from musashi import m68k
 
 
 class Device(object):
@@ -76,12 +54,12 @@ class Device(object):
         add a register to be handled by the device
         """
         register_address = self._address + offset
-        if size == MEM_SIZE_8:
+        if size == m68k.MEM_SIZE_8:
             pass
-        elif (size == MEM_SIZE_16):
+        elif (size == m68k.MEM_SIZE_16):
             if (register_address & 1) != 0:
                 raise RuntimeError(f'register {name} size 16 at {register_address:#x} not 2-aligned')
-        elif (size == MEM_SIZE_32):
+        elif (size == m68k.MEM_SIZE_32):
             if (register_address & 3) != 0:
                 raise RuntimeError(f'register {name} size 32 at {register_address:#x} not 4-aligned')
         Device._register_map[register_address] = {
@@ -221,10 +199,10 @@ class Device(object):
     def get_vector(self, interrupt):
         """
         Called during the interrupt acknowledge phase. If the interrupt argument matches the
-        device IPL, should return a programmed vector or M68K_IRQ_AUTOVECTOR as appropriate if
-        the device is interrupting, or M68K_IRQ_SPURIOUS otherwise.
+        device IPL, should return a programmed vector or m68k.IRQ_AUTOVECTOR as appropriate if
+        the device is interrupting, or m68k.IRQ_SPURIOUS otherwise.
         """
-        return M68K_IRQ_SPURIOUS
+        return m68k.IRQ_SPURIOUS
 
 
 class RootDevice(Device):
@@ -237,8 +215,8 @@ class RootDevice(Device):
 
         self._trace_io = args.trace_io or args.trace_everything
 
-        set_int_ack_callback(self.cb_int)
-        mem_set_device_handler(self.cb_access)
+        m68k.set_int_ack_callback(self.cb_int)
+        m68k.mem_set_device_handler(self.cb_access)
 
         emu.add_reset_hook(self.reset)
 
@@ -265,14 +243,14 @@ class RootDevice(Device):
         try:
             for dev in Device._devices:
                 vector = dev.get_vector(interrupt)
-                if vector != M68K_IRQ_SPURIOUS:
+                if vector != m68k.IRQ_SPURIOUS:
                     self.trace(f'{dev._name} returns vector {vector:#x}')
                     return vector
             self.trace('no interrupting device')
         except Exception:
             self._emu.fatal_exception(sys.exc_info())
 
-        return M68K_IRQ_SPURIOUS
+        return m68k.IRQ_SPURIOUS
 
     def cb_access(self, operation, address, size, value):
         try:
@@ -284,9 +262,9 @@ class RootDevice(Device):
                 # XXX bus error?
                 return 0xffffffff
 
-            if operation == MEM_READ:
+            if operation == m68k.MEM_READ:
                 handler_key = 'read'
-            elif operation == MEM_WRITE:
+            elif operation == m68k.MEM_WRITE:
                 handler_key = 'write'
             else:
                 raise RuntimeError(f'unexpected device access {operation}')
@@ -298,24 +276,24 @@ class RootDevice(Device):
 
             offset = address - reg_info['device']._address
 
-            if operation == MEM_READ:
+            if operation == m68k.MEM_READ:
                 value = handler()
                 if self._trace_io:
                     label = f'{Device.register_name(address)}'
-                    if size == MEM_SIZE_8:
+                    if size == m68k.MEM_SIZE_8:
                         str = f'{label} -> {value:#02x}'
-                    elif size == MEM_SIZE_16:
+                    elif size == m68k.MEM_SIZE_16:
                         str = f'{label} -> {value:#04x}'
                     else:
                         str = f'{label} -> {value:#08x}'
                     Device._emu.trace('DEV_READ', address=address, info=str)
 
-            elif operation == MEM_WRITE:
+            elif operation == m68k.MEM_WRITE:
                 if self._trace_io:
                     label = f'{Device.register_name(address)}'
-                    if size == MEM_SIZE_8:
+                    if size == m68k.MEM_SIZE_8:
                         str = f'{label} <- {value:#02x}'
-                    elif size == MEM_SIZE_16:
+                    elif size == m68k.MEM_SIZE_16:
                         str = f'{label} <- {value:#04x}'
                     else:
                         str = f'{label} <- {value:#08x}'
@@ -332,7 +310,7 @@ class RootDevice(Device):
     def add_device(self, args, dev, address=None, interrupt=None):
         new_dev = dev(args=args, address=address, interrupt=interrupt)
         if address is not None:
-            if not mem_add_device(address, new_dev.size):
+            if not m68k.mem_add_device(address, new_dev.size):
                 raise RuntimeError(f"could not map device @ 0x{address:x}/{size}")
         Device._devices.append(new_dev)
 
@@ -360,7 +338,7 @@ class RootDevice(Device):
                 interruptingDevice = dev
                 ipl = dev_ipl
         if ipl > 0:
-            SR = get_reg(M68K_REG_SR)
+            SR = m68k.get_reg(m68k.REG_SR)
             cpl = (SR >> 8) & 7
             if ipl > cpl:
                 self.trace(f'{interruptingDevice._name} asserts ipl {ipl}')
@@ -368,8 +346,8 @@ class RootDevice(Device):
                 # or when SR is changed by the program, so if we have just asserted
                 # an unmasked interrupt we need to end the timeslice to get its
                 # attention
-                end_timeslice()
-        set_irq(ipl)
+                m68k.end_timeslice()
+        m68k.set_irq(ipl)
 
     def _schedule_next_tick(self):
         earliest_deadline = sys.maxsize

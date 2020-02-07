@@ -1,7 +1,7 @@
-from emulator import Emulator, M68K_IRQ_2
+from emulator import Emulator
 from devices.CompactFlash import CompactFlash
 from devices.MC68681 import MC68681
-from musashi.m68k import mem_write_bulk
+from musashi import m68k
 
 
 def add_arguments(parser):
@@ -23,7 +23,7 @@ def configure(args):
     emu.add_device(args,
                    MC68681,
                    address=0xfff000,
-                   interrupt=M68K_IRQ_2)
+                   interrupt=m68k.IRQ_2)
     emu.add_device(args,
                    CompactFlash,
                    address=0xffe000)
@@ -33,6 +33,6 @@ def configure(args):
         if (len(rom_image) > (32 * 1024)):
             raise RuntimeError(f'ROM image {args.eeprom} must be <= 32k')
         print(f'loaded {len(rom_image)} bytes of EEPROM')
-        mem_write_bulk(0, rom_image)
+        m68k.mem_write_bulk(0, rom_image)
 
     return emu

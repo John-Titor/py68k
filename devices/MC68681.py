@@ -1,19 +1,11 @@
 import sys
 from device import Device
 from collections import deque
-from musashi.m68k import (
-    MEM_SIZE_8,
-)
+
+from musashi import m68k
 
 
 class Channel():
-
-    REG_MR = 0x01
-    REG_SR = 0x03
-    REG_RB = 0x07
-    REG_CSR = 0x03
-    REG_CR = 0x05
-    REG_TB = 0x07
 
     MR1_FFULL_EN = 0x40
 
@@ -174,22 +166,22 @@ class MC68681(Device):
         self._a = Channel(self, args.duart_console_port == 'A')
         self._b = Channel(self, args.duart_console_port == 'B')
         self.add_registers([
-            ('MRA',            0x01, MEM_SIZE_8, self._a.read_mr,    self._a.write_mr),
-            ('SRA/CSRA',       0x03, MEM_SIZE_8, self._a.read_sr,    self._a.write_csr),
-            ('CRA',            0x05, MEM_SIZE_8, self._read_nop,     self._a.write_cr),
-            ('RBA/TBA',        0x07, MEM_SIZE_8, self._a.read_rb,    self._a.write_tb),
-            ('IPCR/ACR',       0x09, MEM_SIZE_8, self._read_ipcr,    self._write_acr),
-            ('ISR/IMR',        0x0b, MEM_SIZE_8, self._read_isr,     self._write_imr),
-            ('CUR/CTUR',       0x0d, MEM_SIZE_8, self._read_cur,     self._write_ctur),
-            ('CLR/CTLR',       0x0f, MEM_SIZE_8, self._read_clr,     self._write_ctlr),
-            ('MRB',            0x11, MEM_SIZE_8, self._b.read_mr,    self._b.write_mr),
-            ('SRB/CSRB',       0x13, MEM_SIZE_8, self._b.read_sr,    self._b.write_csr),
-            ('CRB',            0x15, MEM_SIZE_8, self._read_nop,     self._b.write_cr),
-            ('RBB/TBB',        0x17, MEM_SIZE_8, self._b.read_rb,    self._b.write_tb),
-            ('IVR',            0x19, MEM_SIZE_8, self._read_ivr,     self._write_ivr),
-            ('IPR/OPCR',       0x1b, MEM_SIZE_8, self._read_ipr,     self._write_nop),
-            ('STARTCC/OPRSET', 0x1d, MEM_SIZE_8, self._read_startcc, self._write_nop),
-            ('STOPCC/OPRCLR',  0x1f, MEM_SIZE_8, self._read_stopcc,  self._write_nop),
+            ('MRA',            0x01, m68k.MEM_SIZE_8, self._a.read_mr,    self._a.write_mr),
+            ('SRA/CSRA',       0x03, m68k.MEM_SIZE_8, self._a.read_sr,    self._a.write_csr),
+            ('CRA',            0x05, m68k.MEM_SIZE_8, self._read_nop,     self._a.write_cr),
+            ('RBA/TBA',        0x07, m68k.MEM_SIZE_8, self._a.read_rb,    self._a.write_tb),
+            ('IPCR/ACR',       0x09, m68k.MEM_SIZE_8, self._read_ipcr,    self._write_acr),
+            ('ISR/IMR',        0x0b, m68k.MEM_SIZE_8, self._read_isr,     self._write_imr),
+            ('CUR/CTUR',       0x0d, m68k.MEM_SIZE_8, self._read_cur,     self._write_ctur),
+            ('CLR/CTLR',       0x0f, m68k.MEM_SIZE_8, self._read_clr,     self._write_ctlr),
+            ('MRB',            0x11, m68k.MEM_SIZE_8, self._b.read_mr,    self._b.write_mr),
+            ('SRB/CSRB',       0x13, m68k.MEM_SIZE_8, self._b.read_sr,    self._b.write_csr),
+            ('CRB',            0x15, m68k.MEM_SIZE_8, self._read_nop,     self._b.write_cr),
+            ('RBB/TBB',        0x17, m68k.MEM_SIZE_8, self._b.read_rb,    self._b.write_tb),
+            ('IVR',            0x19, m68k.MEM_SIZE_8, self._read_ivr,     self._write_ivr),
+            ('IPR/OPCR',       0x1b, m68k.MEM_SIZE_8, self._read_ipr,     self._write_nop),
+            ('STARTCC/OPRSET', 0x1d, m68k.MEM_SIZE_8, self._read_startcc, self._write_nop),
+            ('STOPCC/OPRCLR',  0x1f, m68k.MEM_SIZE_8, self._read_stopcc,  self._write_nop),
         ])
         self.reset()
 
@@ -319,7 +311,7 @@ class MC68681(Device):
     def get_vector(self, interrupt):
         if (interrupt == self._interrupt) and self._is_interrupting:
             return self._ivr
-        return M68K_IRQ_SPURIOUS
+        return m68k.IRQ_SPURIOUS
 
     def _update_counter(self):
         self.tick_deadline = 0

@@ -4,141 +4,56 @@ import signal
 import traceback
 
 from imageELF import ELFImage
-# import imageBIN
-
 from device import RootDevice
-
-from musashi.m68k import (
-
-    # Musashi API
-    M68K_CPU_TYPE_INVALID,
-    M68K_CPU_TYPE_68000,
-    M68K_CPU_TYPE_68010,
-    M68K_CPU_TYPE_68EC020,
-    M68K_CPU_TYPE_68020,
-    M68K_CPU_TYPE_68EC030,
-    M68K_CPU_TYPE_68030,
-    M68K_CPU_TYPE_68EC040,
-    M68K_CPU_TYPE_68LC040,
-    M68K_CPU_TYPE_68040,
-    M68K_CPU_TYPE_SCC68070,
-    M68K_IRQ_1,
-    M68K_IRQ_2,
-    M68K_IRQ_3,
-    M68K_IRQ_4,
-    M68K_IRQ_5,
-    M68K_IRQ_6,
-    M68K_IRQ_7,
-    M68K_REG_D0,
-    M68K_REG_D1,
-    M68K_REG_D2,
-    M68K_REG_D3,
-    M68K_REG_D4,
-    M68K_REG_D5,
-    M68K_REG_D6,
-    M68K_REG_D7,
-    M68K_REG_A0,
-    M68K_REG_A1,
-    M68K_REG_A2,
-    M68K_REG_A3,
-    M68K_REG_A4,
-    M68K_REG_A5,
-    M68K_REG_A6,
-    M68K_REG_A7,
-    M68K_REG_PC,
-    M68K_REG_PPC,
-    M68K_REG_SR,
-    M68K_REG_SP,
-    M68K_REG_USP,
-    M68K_REG_ISP,
-
-    cpu_init,
-    disassemble,
-    cycles_run,
-    cycles_remaining,
-    end_timeslice,
-    execute,
-    get_reg,
-    set_reg,
-    pulse_reset,
-    set_cpu_type,
-    set_instr_hook_callback,
-    set_pc_changed_callback,
-    set_reset_instr_callback,
-    set_illg_instr_callback,
-
-    # Memory API
-    MEM_READ,
-    MEM_WRITE,
-    INVALID_READ,
-    INVALID_WRITE,
-    MEM_MAP,
-    MEM_SIZE_8,
-    MEM_SIZE_16,
-    MEM_SIZE_32,
-    MEM_MAP_ROM,
-    MEM_MAP_RAM,
-    MEM_MAP_DEVICE,
-
-    mem_add_memory,
-    mem_set_trace_handler,
-    mem_enable_tracing,
-    mem_enable_bus_error,
-    mem_read_memory,
-    mem_write_memory,
-    mem_write_bulk,
-)
+from musashi import m68k
 
 
 class Emulator(object):
 
     registers = {
-        'D0': M68K_REG_D0,
-        'D1': M68K_REG_D1,
-        'D2': M68K_REG_D2,
-        'D3': M68K_REG_D3,
-        'D4': M68K_REG_D4,
-        'D5': M68K_REG_D5,
-        'D6': M68K_REG_D6,
-        'D7': M68K_REG_D7,
-        'A0': M68K_REG_A0,
-        'A1': M68K_REG_A1,
-        'A2': M68K_REG_A2,
-        'A3': M68K_REG_A3,
-        'A4': M68K_REG_A4,
-        'A5': M68K_REG_A5,
-        'A6': M68K_REG_A6,
-        'A7': M68K_REG_A7,
-        'PC': M68K_REG_PC,
-        'SR': M68K_REG_SR,
-        'SP': M68K_REG_SP,
-        'USP': M68K_REG_USP,
-        'SSP': M68K_REG_ISP,
+        'D0': m68k.REG_D0,
+        'D1': m68k.REG_D1,
+        'D2': m68k.REG_D2,
+        'D3': m68k.REG_D3,
+        'D4': m68k.REG_D4,
+        'D5': m68k.REG_D5,
+        'D6': m68k.REG_D6,
+        'D7': m68k.REG_D7,
+        'A0': m68k.REG_A0,
+        'A1': m68k.REG_A1,
+        'A2': m68k.REG_A2,
+        'A3': m68k.REG_A3,
+        'A4': m68k.REG_A4,
+        'A5': m68k.REG_A5,
+        'A6': m68k.REG_A6,
+        'A7': m68k.REG_A7,
+        'PC': m68k.REG_PC,
+        'SR': m68k.REG_SR,
+        'SP': m68k.REG_SP,
+        'USP': m68k.REG_USP,
+        'SSP': m68k.REG_ISP,
     }
 
     cpu_map = {
-        '68000': M68K_CPU_TYPE_68000,
-        '68010': M68K_CPU_TYPE_68010,
-        '68EC020': M68K_CPU_TYPE_68EC020,
-        '68020': M68K_CPU_TYPE_68020,
-        '68EC030': M68K_CPU_TYPE_68EC030,
-        '68030': M68K_CPU_TYPE_68030,
-        '68EC040': M68K_CPU_TYPE_68EC040,
-        '68LC040': M68K_CPU_TYPE_68LC040,
-        '68040': M68K_CPU_TYPE_68040,
-        'SCC68070': M68K_CPU_TYPE_SCC68070,
+        '68000': m68k.CPU_TYPE_68000,
+        '68010': m68k.CPU_TYPE_68010,
+        '68EC020': m68k.CPU_TYPE_68EC020,
+        '68020': m68k.CPU_TYPE_68020,
+        '68EC030': m68k.CPU_TYPE_68EC030,
+        '68030': m68k.CPU_TYPE_68030,
+        '68EC040': m68k.CPU_TYPE_68EC040,
+        '68LC040': m68k.CPU_TYPE_68LC040,
+        '68040': m68k.CPU_TYPE_68040,
+        'SCC68070': m68k.CPU_TYPE_SCC68070,
     }
 
     operation_map = {
-        MEM_READ: 'READ',
-        MEM_WRITE: 'WRITE',
-        INVALID_READ: 'BAD_READ',
-        INVALID_WRITE: 'BAD_WRITE',
-        MEM_MAP: 'MAP'
+        m68k.MEM_READ: 'READ',
+        m68k.MEM_WRITE: 'WRITE',
+        m68k.INVALID_READ: 'BAD_READ',
+        m68k.INVALID_WRITE: 'BAD_WRITE',
+        m68k.MEM_MAP: 'MAP'
     }
-
-    ILLG_OK = 1
-    ILLG_ERROR = 0
 
     def __init__(self, args, cpu="68000", frequency=8000000):
 
@@ -172,12 +87,12 @@ class Emulator(object):
             self._cpu_type = self.cpu_map[cpu]
         except KeyError:
             raise RuntimeError(f"unsupported CPU: {cpu}")
-        set_cpu_type(self._cpu_type)
-        cpu_init()
+        m68k.set_cpu_type(self._cpu_type)
+        m68k.cpu_init()
 
         # attach unconditional callback functions
-        set_reset_instr_callback(self.cb_reset)
-        set_illg_instr_callback(self.cb_illg)
+        m68k.set_reset_instr_callback(self.cb_reset)
+        m68k.set_illg_instr_callback(self.cb_illg)
 
         # set tracing options
         if args.trace_memory or args.trace_everything:
@@ -270,13 +185,13 @@ class Emulator(object):
             # relocate to the load address & write to memory
             sections = self._load_image.relocate(self._load_address)
             for section_address, section_data in sections.items():
-                mem_write_bulk(section_address, section_data)
+                m68k.mem_write_bulk(section_address, section_data)
 
             # patch the initial stack and entrypoint
             _, stack_limit = self._load_image.get_symbol_range('__STACK__')
             if stack_limit is not None:
-                mem_write_memory(0x0, MEM_SIZE_32, stack_limit)
-            mem_write_memory(0x4, MEM_SIZE_32, self._load_image.entrypoint)
+                m68k.mem_write_memory(0x0, m68k.MEM_SIZE_32, stack_limit)
+            m68k.mem_write_memory(0x4, m68k.MEM_SIZE_32, self._load_image.entrypoint)
 
         signal.signal(signal.SIGINT, self._keyboard_interrupt)
         print('\nHit ^C to exit\n')
@@ -285,7 +200,7 @@ class Emulator(object):
         self.cb_reset()
 
         # reset the CPU ready for execution
-        pulse_reset()
+        m68k.pulse_reset()
 
         self._start_time = time.time()
         while not self._dead:
@@ -297,7 +212,7 @@ class Emulator(object):
                     quantum = self._device_tick_deadline - self._elapsed_cycles
 
             self.trace('RUN', info=f'quantum {quantum} cycles')
-            self._elapsed_cycles += execute(quantum)
+            self._elapsed_cycles += m68k.execute(quantum)
 
             if self._elapsed_cycles > self._cycle_limit:
                 self.fatal('cycle limit exceeded')
@@ -315,7 +230,7 @@ class Emulator(object):
 
     def schedule_device_tick(self, deadline):
         self._device_tick_deadline = deadline
-        if (self.current_cycle + cycles_remaining()) > deadline:
+        if (self.current_cycle + m68k.cycles_remaining()) > deadline:
             modify_timeslice(deadline - self.current_cycle)
 
     def set_quantum(self, new_quantum):
@@ -326,7 +241,7 @@ class Emulator(object):
         """
         Add RAM/ROM to the emulation
         """
-        if not mem_add_memory(base, size, writable, contents):
+        if not m68k.mem_add_memory(base, size, writable, contents):
             raise RuntimeError(f"failed to add memory 0x{base:x}/{size}")
 
     def add_device(self, args, dev, address=None, interrupt=None):
@@ -360,7 +275,7 @@ class Emulator(object):
         """
         Return the number of the current clock cycle (cycles elapsed since reset)
         """
-        return self._elapsed_cycles + cycles_run()
+        return self._elapsed_cycles + m68k.cycles_run()
 
     @property
     def cycle_rate(self):
@@ -372,20 +287,20 @@ class Emulator(object):
         """
         if what == 'memory':
             self._trace_memory = True
-            mem_set_trace_handler(self.cb_trace_memory)
-            mem_enable_tracing(True)
+            m68k.mem_set_trace_handler(self.cb_trace_memory)
+            m68k.mem_enable_tracing(True)
 
         elif what == 'instructions':
             self._trace_instructions = True
-            set_instr_hook_callback(self.cb_trace_instruction)
+            m68k.set_instr_hook_callback(self.cb_trace_instruction)
             self.trace_enable('jumps')
 
         elif what == 'jumps':
             self._trace_jumps = True
-            set_pc_changed_callback(self.cb_trace_jump)
+            m68k.set_pc_changed_callback(self.cb_trace_jump)
 
         elif what == 'exceptions':
-            set_pc_changed_callback(self.cb_trace_jump)
+            m68k.set_pc_changed_callback(self.cb_trace_jump)
 
         else:
             raise RuntimeError('bad tracing option {}'.format(what))
@@ -424,21 +339,21 @@ class Emulator(object):
         """
         try:
             action = self.operation_map[operation]
-            if operation == MEM_MAP:
-                if value == MEM_MAP_RAM:
+            if operation == m68k.MEM_MAP:
+                if value == m68k.MEM_MAP_RAM:
                     info = f'RAM {size:#x}'
-                elif value == MEM_MAP_ROM:
+                elif value == m68k.MEM_MAP_ROM:
                     info = f'ROM {size:#x}'
-                elif value == MEM_MAP_DEVICE:
+                elif value == m68k.MEM_MAP_DEVICE:
                     info = f'DEVICE {size:#x}'
                 else:
                     raise RuntimeError(f'unexpected mapping type {value}')
             else:
-                if size == MEM_SIZE_8:
+                if size == m68k.MEM_SIZE_8:
                     info = f'{value:#04x}'
-                elif size == MEM_SIZE_16:
+                elif size == m68k.MEM_SIZE_16:
                     info = f'{value:#06x}'
-                elif size == MEM_SIZE_32:
+                elif size == m68k.MEM_SIZE_32:
                     info = f'{value:#010x}'
                 else:
                     raise RuntimeError(f'unexpected trace size {size}')
@@ -455,11 +370,11 @@ class Emulator(object):
         Cut an instruction trace entry
         """
         try:
-            dis = disassemble(pc, self._cpu_type)
+            dis = m68k.disassemble(pc, self._cpu_type)
             info = ''
             for reg in self.registers:
                 if dis.find(reg) is not -1:
-                    info += ' {}={:#x}'.format(reg, get_reg(self.registers[reg]))
+                    info += ' {}={:#x}'.format(reg, m68k.get_reg(self.registers[reg]))
 
             self.trace('EXECUTE', pc, '{:30} {}'.format(dis, info))
             return
@@ -473,7 +388,7 @@ class Emulator(object):
         """
 
         # might want to end here due to memory issues?
-        end_timeslice()
+        m68k.end_timeslice()
 
         # call reset hooks
         for hook in self._reset_hooks:
@@ -488,13 +403,13 @@ class Emulator(object):
         """
         if instr == 0x7300:     # nfID
             self.trace('nFID')
-            return self._nfID(get_reg(self.registers['SP']) + 4)
+            return self._nfID(m68k.get_reg(self.registers['SP']) + 4)
         elif instr == 0x7301:     # nfCall
             self.trace('nFCall')
-            return self._nfCall(get_reg(self.registers['SP']) + 4)
+            return self._nfCall(m68k.get_reg(self.registers['SP']) + 4)
 
         # instruction not handled by emulator, legitimately illegal
-        return self.ILLG_ERROR
+        return m68k.ILLG_ERROR
 
     def cb_trace_jump(self, new_pc):
         """
@@ -512,24 +427,24 @@ class Emulator(object):
     def _nfID(self, argptr):
         id = self._get_string(argptr)
         if id is None:
-            return self.ILLG_ERROR
+            return m68k.ILLG_ERROR
 
         if id == 'NF_VERSION':
-            set_reg(M68K_REG_D0, 1)
+            m68k.set_reg(m68k.REG_D0, 1)
         # elif id == 'NF_NAME':
-        #    set_reg(M68K_REG_D0, 1)
+        #    m68k.set_reg(m68k.REG_D0, 1)
         elif id == 'NF_STDERR':
-            set_reg(M68K_REG_D0, 2)
+            m68k.set_reg(m68k.REG_D0, 2)
         elif id == 'NF_SHUTDOWN':
-            set_reg(M68K_REG_D0, 3)
+            m68k.set_reg(m68k.REG_D0, 3)
         else:
-            return self.ILLG_ERROR
-        return self.ILLG_OK
+            return m68k.ILLG_ERROR
+        return m68k.ILLG_OK
 
     def _nfCall(self, argptr):
-        func = mem_read_memory(argptr, MEM_SIZE_32)
+        func = m68k.mem_read_memory(argptr, m68k.MEM_SIZE_32)
         if func == 0:   # NF_VERSION
-            set_reg(M68K_REG_D0, 1)
+            m68k.set_reg(m68k.REG_D0, 1)
         # elif func == 1:
         #    pass
         elif func == 2:
@@ -537,23 +452,23 @@ class Emulator(object):
         elif func == 3:
             self.fatal('shutdown requested')
         else:
-            return self.ILLG_ERROR
-        return self.ILLG_OK
+            return m68k.ILLG_ERROR
+        return m68k.ILLG_OK
 
     def _nf_stderr(self, argptr):
         msg = self._get_string(argptr)
         if msg is None:
-            return self.ILLG_ERROR
+            return m68k.ILLG_ERROR
         sys.stderr.write(msg)
-        return self.ILLG_OK
+        return m68k.ILLG_OK
 
     def _get_string(self, argptr):
-        strptr = mem_read_memory(argptr, MEM_SIZE_32)
+        strptr = m68k.mem_read_memory(argptr, m68k.MEM_SIZE_32)
         if strptr == 0xffffffff:
             return None
         result = str()
         while True:
-            c = mem_read_memory(strptr, MEM_SIZE_8)
+            c = m68k.mem_read_memory(strptr, m68k.MEM_SIZE_8)
             if c == 0xffffffff:
                 return None
             if (c == 0) or (len(result) > 255):
@@ -567,7 +482,7 @@ class Emulator(object):
         """
         self._dead = True
         self._exception_info = exception_info
-        end_timeslice()
+        m68k.end_timeslice()
 
     def fatal(self, reason):
         """
@@ -575,7 +490,7 @@ class Emulator(object):
         """
         self._dead = True
         self._postmortem = reason
-        end_timeslice()
+        m68k.end_timeslice()
 
     def fatal_info(self):
         result = ''

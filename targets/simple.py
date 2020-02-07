@@ -1,4 +1,5 @@
-from emulator import Emulator, M68K_IRQ_2, M68K_IRQ_6
+from emulator import Emulator
+from musashi import m68k
 from devices.simple import UART, Timer
 
 
@@ -44,10 +45,10 @@ def configure(args):
     emu.add_device(args,
                    UART,
                    address=iobase,
-                   interrupt=M68K_IRQ_2)
+                   interrupt=m68k.IRQ_2)
     emu.add_device(args,
                    Timer,
                    address=iobase + 0x1000,
-                   interrupt=M68K_IRQ_6)
+                   interrupt=m68k.IRQ_6)
 
     return emu
