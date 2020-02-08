@@ -17,9 +17,11 @@ class UART(Device):
 
     _unit = 0
 
-    def __init__(self, args, address, interrupt):
-        super(UART, self).__init__(args=args, name='uart',
-                                   address=address, interrupt=interrupt)
+    def __init__(self, args, **options):
+        super(UART, self).__init__(args=args,
+                                   name='uart',
+                                   required_options=['address', 'interrupt'],
+                                   **options)
         self.add_registers([
             ('SR', 0x01, m68k.MEM_SIZE_8, self._read_sr, None),
             ('DR', 0x03, m68k.MEM_SIZE_8, self._read_dr, self._write_dr),
@@ -100,9 +102,11 @@ class Timer(Device):
 
     CONTROL_INTEN = 0x01
 
-    def __init__(self, args, address, interrupt):
-        super(Timer, self).__init__(args=args, name='timer',
-                                    address=address, interrupt=interrupt)
+    def __init__(self, args, **options):
+        super(Timer, self).__init__(args=args,
+                                    name='timer',
+                                    required_options=['address', 'interrupt'],
+                                    **options)
 
         self.add_registers([
             ('PERIOD',  0x00, m68k.MEM_SIZE_32, self._read_period,  self._write_period),

@@ -21,12 +21,6 @@ ADDR_P90AUX = 0x80002080
 
 
 def add_arguments(parser, default_console_port='none', default_crystal_frequency=24):
-    parser.add_argument('--p90-console-port',
-                        type=str,
-                        choices=['0', 'none'],
-                        default=default_console_port,
-                        metavar='PORT-NUMBER',
-                        help='P90CE201 UART port to treat as the console')
     parser.add_argument('--p90-crystal-frequency',
                         type=int,
                         choices=range(1, 24),
@@ -35,10 +29,11 @@ def add_arguments(parser, default_console_port='none', default_crystal_frequency
                         help='P90CE201 clock crystal frequency')
 
 
-def add_devices(args, emu):
+def add_devices(args, emu, crystal_frequency):
     emu.add_device(args,
                    P90Syscon,
-                   address=ADDR_P90Syscon)
+                   address=ADDR_P90Syscon,
+                   fXTAL=crystal_frequency)
 #    emu.add_device(args,
 #                   P90ICU,
 #                   address=ADDR_P90ICU)
@@ -87,15 +82,15 @@ class P90Syscon(Device):
         'SYSCON2L': 0x03,
     }
 
-    def __init__(self, args, address, interrupt):
+    def __init__(self, args, address, fXTAL):
         super(P90Syscon, self).init(args=args,
                                     name='P90Syscon',
                                     address=address)
+
         self.map_registers(P90Syscon._registers)
+        self._fXTAL = fXTAL
         self.reset()
         self.trace('init done')
-
-        self._fXTAL = args.p90_crystal_frequency
 
     def read(self, width, offset):
         if width == MEM_SIZE_16:

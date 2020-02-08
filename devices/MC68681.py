@@ -157,42 +157,62 @@ class MC68681(Device):
     MODE_TMR_XTAL16 = 0x70
     MODE_TMR = 0x40
 
-    def __init__(self, args, address, interrupt):
+    def __init__(self, args, **options):
         super(MC68681, self).__init__(args=args,
                                       name='MC68681',
-                                      address=address,
-                                      interrupt=interrupt)
+                                      required_options=['address', 'interrupt', 'register_arrangement'],
+                                      **options)
 
-        self._a = Channel(self, args.duart_console_port == 'A')
-        self._b = Channel(self, args.duart_console_port == 'B')
-        self.add_registers([
-            ('MRA',            0x01, m68k.MEM_SIZE_8, self._a.read_mr,    self._a.write_mr),
-            ('SRA/CSRA',       0x03, m68k.MEM_SIZE_8, self._a.read_sr,    self._a.write_csr),
-            ('CRA',            0x05, m68k.MEM_SIZE_8, self._read_nop,     self._a.write_cr),
-            ('RBA/TBA',        0x07, m68k.MEM_SIZE_8, self._a.read_rb,    self._a.write_tb),
-            ('IPCR/ACR',       0x09, m68k.MEM_SIZE_8, self._read_ipcr,    self._write_acr),
-            ('ISR/IMR',        0x0b, m68k.MEM_SIZE_8, self._read_isr,     self._write_imr),
-            ('CUR/CTUR',       0x0d, m68k.MEM_SIZE_8, self._read_cur,     self._write_ctur),
-            ('CLR/CTLR',       0x0f, m68k.MEM_SIZE_8, self._read_clr,     self._write_ctlr),
-            ('MRB',            0x11, m68k.MEM_SIZE_8, self._b.read_mr,    self._b.write_mr),
-            ('SRB/CSRB',       0x13, m68k.MEM_SIZE_8, self._b.read_sr,    self._b.write_csr),
-            ('CRB',            0x15, m68k.MEM_SIZE_8, self._read_nop,     self._b.write_cr),
-            ('RBB/TBB',        0x17, m68k.MEM_SIZE_8, self._b.read_rb,    self._b.write_tb),
-            ('IVR',            0x19, m68k.MEM_SIZE_8, self._read_ivr,     self._write_ivr),
-            ('IPR/OPCR',       0x1b, m68k.MEM_SIZE_8, self._read_ipr,     self._write_nop),
-            ('STARTCC/OPRSET', 0x1d, m68k.MEM_SIZE_8, self._read_startcc, self._write_nop),
-            ('STOPCC/OPRCLR',  0x1f, m68k.MEM_SIZE_8, self._read_stopcc,  self._write_nop),
-        ])
+        console_port = options['console_port'] if 'console_port' in options else 'A'
+        self._a = Channel(self, console_port == 'A')
+        self._b = Channel(self, console_port == 'B')
+
+        if options['register_arrangement'] == '16-bit':
+            self.add_registers([
+                ('MRA',            0x00, m68k.MEM_SIZE_8, self._a.read_mr,    self._a.write_mr),
+                ('SRA/CSRA',       0x02, m68k.MEM_SIZE_8, self._a.read_sr,    self._a.write_csr),
+                ('CRA',            0x04, m68k.MEM_SIZE_8, self._read_nop,     self._a.write_cr),
+                ('RBA/TBA',        0x06, m68k.MEM_SIZE_8, self._a.read_rb,    self._a.write_tb),
+                ('IPCR/ACR',       0x08, m68k.MEM_SIZE_8, self._read_ipcr,    self._write_acr),
+                ('ISR/IMR',        0x0a, m68k.MEM_SIZE_8, self._read_isr,     self._write_imr),
+                ('CUR/CTUR',       0x0c, m68k.MEM_SIZE_8, self._read_cur,     self._write_ctur),
+                ('CLR/CTLR',       0x0e, m68k.MEM_SIZE_8, self._read_clr,     self._write_ctlr),
+                ('MRB',            0x10, m68k.MEM_SIZE_8, self._b.read_mr,    self._b.write_mr),
+                ('SRB/CSRB',       0x12, m68k.MEM_SIZE_8, self._b.read_sr,    self._b.write_csr),
+                ('CRB',            0x14, m68k.MEM_SIZE_8, self._read_nop,     self._b.write_cr),
+                ('RBB/TBB',        0x16, m68k.MEM_SIZE_8, self._b.read_rb,    self._b.write_tb),
+                ('IVR',            0x18, m68k.MEM_SIZE_8, self._read_ivr,     self._write_ivr),
+                ('IPR/OPCR',       0x1a, m68k.MEM_SIZE_8, self._read_ipr,     self._write_nop),
+                ('STARTCC/OPRSET', 0x1c, m68k.MEM_SIZE_8, self._read_startcc, self._write_nop),
+                ('STOPCC/OPRCLR',  0x1e, m68k.MEM_SIZE_8, self._read_stopcc,  self._write_nop),
+            ])
+        elif options['register_arrangement'] == '8-bit':
+            self.add_registers([
+                ('MRA',            0x00, m68k.MEM_SIZE_8, self._a.read_mr,    self._a.write_mr),
+                ('SRA/CSRA',       0x01, m68k.MEM_SIZE_8, self._a.read_sr,    self._a.write_csr),
+                ('CRA',            0x02, m68k.MEM_SIZE_8, self._read_nop,     self._a.write_cr),
+                ('RBA/TBA',        0x03, m68k.MEM_SIZE_8, self._a.read_rb,    self._a.write_tb),
+                ('IPCR/ACR',       0x04, m68k.MEM_SIZE_8, self._read_ipcr,    self._write_acr),
+                ('ISR/IMR',        0x05, m68k.MEM_SIZE_8, self._read_isr,     self._write_imr),
+                ('CUR/CTUR',       0x06, m68k.MEM_SIZE_8, self._read_cur,     self._write_ctur),
+                ('CLR/CTLR',       0x07, m68k.MEM_SIZE_8, self._read_clr,     self._write_ctlr),
+                ('MRB',            0x08, m68k.MEM_SIZE_8, self._b.read_mr,    self._b.write_mr),
+                ('SRB/CSRB',       0x09, m68k.MEM_SIZE_8, self._b.read_sr,    self._b.write_csr),
+                ('CRB',            0x0a, m68k.MEM_SIZE_8, self._read_nop,     self._b.write_cr),
+                ('RBB/TBB',        0x0b, m68k.MEM_SIZE_8, self._b.read_rb,    self._b.write_tb),
+                ('IVR',            0x0c, m68k.MEM_SIZE_8, self._read_ivr,     self._write_ivr),
+                ('IPR/OPCR',       0x0d, m68k.MEM_SIZE_8, self._read_ipr,     self._write_nop),
+                ('STARTCC/OPRSET', 0x0e, m68k.MEM_SIZE_8, self._read_startcc, self._write_nop),
+                ('STOPCC/OPRCLR',  0x0f, m68k.MEM_SIZE_8, self._read_stopcc,  self._write_nop),
+            ])
+        else:
+            raise RuntimeError(f'register_arrangement {options["register_arrangement"]} not recognized')
+
         self.reset()
 
     @classmethod
-    def add_arguments(cls, parser, default_console_port='none'):
-        parser.add_argument('--duart-console-port',
-                            type=str,
-                            choices=['A', 'B', 'none'],
-                            default=default_console_port,
-                            help='MC68681 DUART port to treat as console')
-        return
+    def add_arguments(cls, parser):
+        pass
 
     def _read_ipcr(self):
         return 0x03  # CTSA/CTSB are always asserted

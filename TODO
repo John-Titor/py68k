@@ -9,7 +9,7 @@ Things to investigate / fix:
   ✔ fix disassembly @done (20-02-01 10:12)
   ✔ fix symbolication @done (20-02-01 10:12)
   ✘ fix tracing triggers @cancelled (20-02-01 10:12)
-  ☐ interrupts are broken
+  ✔ interrupts are broken @done (20-02-07 20:34)
   ✔ need to allow devices on arbitrary address boundaries; 4K is too coarse @done (20-01-31 09:34)
   ✔ --debug-device doesn't seem to work with a device and 'device' @done (20-02-02 23:00)
   ✔ suppress read traces for instruction fetches @done (20-02-02 18:24)
@@ -27,6 +27,7 @@ Features:
   ✔ multiple ELF files for symbol lookup @done (20-01-30 09:01)
   ✔ load ELF file to RAM & go @done (20-01-31 09:34)
   ✘ inject arbitrary RAM contents @cancelled (20-01-31 09:34)
+  ☐ factor ROM loading into emu.add_memory rather than duplicating in the target
 
 Devices:
   ☐ root_device should signal bus error on failed register decode
@@ -37,7 +38,10 @@ Devices:
     ✔ scrub devices : don't allow tick to return None @done (20-02-04 23:08)
   ☐ option to en/disable buserror generation
   ☐ console input should cause tick
-  ☐ better handling of deadlines returned by tick - perhaps track a per-device deadline rather than just the lowest from the most recent poll? device register accesses can cause deadlines to be lost...
+  ✔ better handling of deadlines returned by tick - perhaps track a per-device deadline rather than just the lowest from the most recent poll? device register accesses can cause deadlines to be lost... @done (20-02-07 20:34)
+  ☐ some way to pass options to devices without having them be commandline args
+  68681:
+   ☐ don't assume 'off-by-one' mapping, configure for low-byte, high-byte and packed
   I2C:
     ☐ generic I2C 'bus'
     ☐ DS1232 RTC
@@ -47,7 +51,7 @@ Devices:
       Can't be done for Tiny68k as /CS1 is permanently high
     ✔ IDENTIFY DEVICE @done (20-01-11 09:14)
     ✔ option to set disk file @done (20-01-25 21:40)
-
+    ☐ don't assume spacing between registers, support at least packed and 1-spaced
 Tiny68k:
   ☐ I2C realtime clock device 
   ☐ I2C EEPROM emulation

@@ -8,9 +8,8 @@ def add_arguments(parser):
     parser.add_argument('--eeprom',
                         type=str,
                         help='ROM image to load at reset')
+    MC68681.add_arguments(parser)
     CompactFlash.add_arguments(parser)
-    MC68681.add_arguments(parser,
-                          default_console_port='A')
 
 
 def configure(args):
@@ -22,11 +21,14 @@ def configure(args):
     emu.add_memory(base=0, size=(16 * 1024 - 32) * 1024)
     emu.add_device(args,
                    MC68681,
-                   address=0xfff000,
-                   interrupt=m68k.IRQ_2)
+                   address=0xfff001,
+                   interrupt=m68k.IRQ_2,
+                   console_port='A',
+                   register_arrangement='16-bit')
     emu.add_device(args,
                    CompactFlash,
-                   address=0xffe000)
+                   address=0xffe000,
+                   register_arrangement='16-bit')
 
     if args.eeprom is not None:
         rom_image = open(args.eeprom, 'rb').read(32 * 1024 + 1)

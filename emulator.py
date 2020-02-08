@@ -244,18 +244,17 @@ class Emulator(object):
         if not m68k.mem_add_memory(base, size, writable, contents):
             raise RuntimeError(f"failed to add memory 0x{base:x}/{size}")
 
-    def add_device(self, args, dev, address=None, interrupt=None):
+    def add_device(self, args, dev, **options):
         """
         Attach a device to the emulator at the given offset in device space
         """
         if self._root_device is None:
-            self._root_device = dev(args=args, emu=self)
+            self._root_device = dev(args=args, emu=self, **options)
             self._root_device.add_system_devices(args)
         else:
             self._root_device.add_device(args=args,
                                          dev=dev,
-                                         address=address,
-                                         interrupt=interrupt)
+                                         **options)
 
     def add_reset_hook(self, hook):
         """

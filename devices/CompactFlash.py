@@ -37,19 +37,36 @@ class CompactFlash(Device):
     Reference: XT13/2008D
     """
 
-    def __init__(self, args, address, interrupt):
-        super(CompactFlash, self).__init__(args=args, name='CF', address=address)
-        self.add_registers([
-            ('DATA16',         0x00, m68k.MEM_SIZE_16, self._read_data16,        self._write_data16),
-            ('DATA8',          0x01, m68k.MEM_SIZE_8,  self._read_data8,         self._write_data8),
-            ('ERROR/FEATURE',  0x03, m68k.MEM_SIZE_8,  self._read_error,         self._write_feature),
-            ('SECTOR_COUNT',   0x05, m68k.MEM_SIZE_8,  self._read_sector_count,  self._write_sector_count),
-            ('SECTOR_NUMBER',  0x07, m68k.MEM_SIZE_8,  self._read_sector_number, self._write_sector_number),
-            ('CYLINDER_LOW',   0x09, m68k.MEM_SIZE_8,  self._read_cylinder_low,  self._write_cylinder_low),
-            ('CYLINDER_HIGH',  0x0b, m68k.MEM_SIZE_8,  self._read_cylinder_high, self._write_cylinder_high),
-            ('DRIVE/HEAD',     0x0d, m68k.MEM_SIZE_8,  self._read_drive_head,    self._write_drive_head),
-            ('STATUS/COMMAND', 0x0f, m68k.MEM_SIZE_8,  self._read_status,        self._write_command),
-        ])
+    def __init__(self, args, **options):
+        super(CompactFlash, self).__init__(args=args,
+                                           name='CF',
+                                           required_options=['address', 'register_arrangement'],
+                                           **options)
+        if options['register_arrangement'] == '16-bit':
+            self.add_registers([
+                ('DATA16',         0x00, m68k.MEM_SIZE_16, self._read_data16,        self._write_data16),
+                ('DATA8',          0x01, m68k.MEM_SIZE_8,  self._read_data8,         self._write_data8),
+                ('ERROR/FEATURE',  0x03, m68k.MEM_SIZE_8,  self._read_error,         self._write_feature),
+                ('SECTOR_COUNT',   0x05, m68k.MEM_SIZE_8,  self._read_sector_count,  self._write_sector_count),
+                ('SECTOR_NUMBER',  0x07, m68k.MEM_SIZE_8,  self._read_sector_number, self._write_sector_number),
+                ('CYLINDER_LOW',   0x09, m68k.MEM_SIZE_8,  self._read_cylinder_low,  self._write_cylinder_low),
+                ('CYLINDER_HIGH',  0x0b, m68k.MEM_SIZE_8,  self._read_cylinder_high, self._write_cylinder_high),
+                ('DRIVE/HEAD',     0x0d, m68k.MEM_SIZE_8,  self._read_drive_head,    self._write_drive_head),
+                ('STATUS/COMMAND', 0x0f, m68k.MEM_SIZE_8,  self._read_status,        self._write_command),
+            ])
+        elif options['register_arrangement'] == '8-bit':
+            self.add_registers([
+                ('DATA8',          0x00, m68k.MEM_SIZE_8,  self._read_data8,         self._write_data8),
+                ('ERROR/FEATURE',  0x01, m68k.MEM_SIZE_8,  self._read_error,         self._write_feature),
+                ('SECTOR_COUNT',   0x02, m68k.MEM_SIZE_8,  self._read_sector_count,  self._write_sector_count),
+                ('SECTOR_NUMBER',  0x03, m68k.MEM_SIZE_8,  self._read_sector_number, self._write_sector_number),
+                ('CYLINDER_LOW',   0x04, m68k.MEM_SIZE_8,  self._read_cylinder_low,  self._write_cylinder_low),
+                ('CYLINDER_HIGH',  0x05, m68k.MEM_SIZE_8,  self._read_cylinder_high, self._write_cylinder_high),
+                ('DRIVE/HEAD',     0x06, m68k.MEM_SIZE_8,  self._read_drive_head,    self._write_drive_head),
+                ('STATUS/COMMAND', 0x07, m68k.MEM_SIZE_8,  self._read_status,        self._write_command),
+            ])
+        else:
+            raise RuntimeError(f'register_arrangement {options["register_arrangement"]} not recognized')
 
         # open the backing file
         if args.diskfile is not None:
@@ -140,7 +157,6 @@ class CompactFlash(Device):
     @classmethod
     def add_arguments(cls, parser):
         """add argument definitions for args passed to __init__"""
-
         parser.add_argument('--diskfile',
                             type=str,
                             default=None,
@@ -198,22 +214,22 @@ class CompactFlash(Device):
         self._r_drive_head = value
 
     def _write_command(self, value):
-        if command == CMD_READ_SECTORS:
+        if value == CMD_READ_SECTORS:
             self._trace_io('READ')
             self._do_io(AMODE_READ)
 
-        elif command == CMD_WRITE_SECTORS:
+        elif value == CMD_WRITE_SECTORS:
             self._trace_io('WRITE')
             self._do_io(AMODE_WRITE)
 
-        elif command == CMD_IDENTIFY_DEVICE:
+        elif value == CMD_IDENTIFY_DEVICE:
             self._trace_io('IDENTIFY')
             self._do_identify()
 
         else:
             self._r_status = STATUS_ERR
             self._r_error = ERROR_ABORT
-            self._trace_io('IOERR', 'command {:02x} not supported'.format(command))
+            self._trace_io('IOERR', 'command {:02x} not supported'.format(value))
 
     def _trace_io(self, action):
         self.trace(action, 'count {} LBA {}'.format(

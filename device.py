@@ -30,11 +30,15 @@ class Device(object):
     _console_output_handler = None
     _console_input_handler = None
 
-    def __init__(self, args, name, address=None, interrupt=None):
+    def __init__(self, args, name, required_options=None, **options):
+        if required_options is not None:
+            for optname in required_options:
+                if optname not in options:
+                    raise RuntimeError(f'required option {optname} not specified for {name}')
         self._name = name
-        self._address = address
+        self._address = options['address'] if 'address' in options else None
+        self._interrupt = options['interrupt'] if 'interrupt' in options else None
         self._size = 0
-        self._interrupt = interrupt
         self._debug = self._name in args.debug_device
 
         self.tick_deadline = 0
@@ -207,7 +211,7 @@ class Device(object):
 
 class RootDevice(Device):
 
-    def __init__(self, args, emu):
+    def __init__(self, args, emu, **options):
         super(RootDevice, self).__init__(args=args, name='root')
         Device._emu = emu
         Device._root_device = self
@@ -307,11 +311,11 @@ class RootDevice(Device):
 
         return value
 
-    def add_device(self, args, dev, address=None, interrupt=None):
-        new_dev = dev(args=args, address=address, interrupt=interrupt)
-        if address is not None:
-            if not m68k.mem_add_device(address, new_dev.size):
-                raise RuntimeError(f"could not map device @ 0x{address:x}/{size}")
+    def add_device(self, args, dev, **options):
+        new_dev = dev(args=args, **options)
+        if new_dev.address is not None:
+            if not m68k.mem_add_device(new_dev.address, new_dev.size):
+                raise RuntimeError(f"could not map device @ 0x{new_dev.address:x}/{new_dev.size}")
         Device._devices.append(new_dev)
 
     def tick_all(self):
@@ -359,7 +363,7 @@ class RootDevice(Device):
 
 
 class SocketConsole(Device):
-    def __init__(self, args, address, interrupt):
+    def __init__(self, args, **options):
         super(SocketConsole, self).__init__(args=args, name='socket-console')
 
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
