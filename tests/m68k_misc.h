@@ -36,15 +36,25 @@ typedef void    (*exception_handler_t)(void);
 #define VEC_TRAP(_y)        VECTOR(32 + (_y))   // TRAP instruction vectors (0-15)
 #define VEC_USER(_y)        VECTOR(64 + (_y))   // User interrupt vectors (0-63)
 
+/* call this at the head of main() to clear the BSS */
 static inline void
-zero_bss()
+early_main()
 {
     extern uint32_t __bss_start;
     extern uint32_t _end;
-    uint32_t *ptr = &__bss_start;
+    volatile uint32_t *ptr = &__bss_start;
 
     while (ptr < &_end) {
         *ptr++ = 0;
+    }
+
+    typedef void (*initfunc_t)();
+    extern initfunc_t	__init_array_start;
+    extern initfunc_t	__init_array_end;
+    initfunc_t			*ifp;
+
+    for (ifp = &__init_array_start; ifp < &__init_array_end; ifp++) {
+    	(*ifp)();
     }
 }
 

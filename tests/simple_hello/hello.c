@@ -56,11 +56,10 @@ timer_handler()
     for (;;) ;
 }
 
-
 void
 main(void)
 {
-    zero_bss();
+    early_main();
 
     VEC_BUS_ERROR = unexpected_exception;
     VEC_ADDR_ERROR = unexpected_exception;
