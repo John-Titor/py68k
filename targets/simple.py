@@ -31,8 +31,8 @@ def add_arguments(parser):
                         default=15,
                         metavar='SIZE-MB',
                         help='memory size')
-    UART.add_arguments(parser)
     Timer.add_arguments(parser)
+    UART.add_arguments(parser)
 
 
 def configure(args):

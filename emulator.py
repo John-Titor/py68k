@@ -237,12 +237,19 @@ class Emulator(object):
         if (new_quantum > 0) and (new_quantum < self._next_quantum):
             self._next_quantum = new_quantum
 
-    def add_memory(self, base, size, writable=True, contents=None):
+    def add_memory(self, base, size, writable=True, from_file=None):
         """
         Add RAM/ROM to the emulation
         """
-        if not m68k.mem_add_memory(base, size, writable, contents):
+        if not m68k.mem_add_memory(base, size, writable):
             raise RuntimeError(f"failed to add memory 0x{base:x}/{size}")
+
+        if from_file is not None:
+            mem_image = open(args.eeprom, "rb").read(size + 1)
+            if (len(mem_image) > size):
+                raise RuntimeError(f"Memory image image {from_file} must be <= {size:#x}")
+            print(f'loaded {len(mem_image)} bytes at {base:#x}')
+            mem_write_bulk(base, mem_image)
 
     def add_device(self, args, dev, **options):
         """

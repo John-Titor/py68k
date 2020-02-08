@@ -7,9 +7,9 @@ from musashi import m68k
 def add_arguments(parser):
     parser.add_argument('--eeprom',
                         type=str,
-                        help='ROM image to load at reset')
-    MC68681.add_arguments(parser)
+                        help='EEPROM image')
     CompactFlash.add_arguments(parser)
+    MC68681.add_arguments(parser)
 
 
 def configure(args):
@@ -33,7 +33,7 @@ def configure(args):
     if args.eeprom is not None:
         rom_image = open(args.eeprom, 'rb').read(32 * 1024 + 1)
         if (len(rom_image) > (32 * 1024)):
-            raise RuntimeError(f'ROM image {args.eeprom} must be <= 32k')
+            raise RuntimeError(f'EEPROM image {args.eeprom} must be <= 32k')
         print(f'loaded {len(rom_image)} bytes of EEPROM')
         m68k.mem_write_bulk(0, rom_image)
 

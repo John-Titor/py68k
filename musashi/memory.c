@@ -245,7 +245,7 @@ mem_set_range(uint32_t base, uint32_t size, pte_t entry)
 // Emulator API
 
 bool
-mem_add_memory(uint32_t base, uint32_t size, bool writable, const void *with_bytes)
+mem_add_memory(uint32_t base, uint32_t size, bool writable)
 {
     // base & size must be aligned
     if ((base % MEM_PAGE_SIZE)
@@ -272,9 +272,6 @@ mem_add_memory(uint32_t base, uint32_t size, bool writable, const void *with_byt
     // allocate buffer
     mem_buffer_t *bp = mem_buffers + buffer_id;
     bp->buf = calloc(size, 1);
-    if (with_bytes) {
-        memcpy(bp->buf, with_bytes, size);
-    }
     bp->base = base;
     bp->size = size;
     bp->writable = writable;
@@ -405,8 +402,27 @@ mem_write_bulk(uint32_t address, uint8_t *buffer, uint32_t size)
 {
     // could make this faster...
     debug("bulk write 0x%x, from %p size %u", address, buffer, size);
-    while (size--) {
-        mem_write_memory(address++, MEM_SIZE_8, *buffer++);
+
+    while (size) {
+        pte_t       pte = mem_pagetable[address / MEM_PAGE_SIZE];
+        uint32_t    page_offset = address % MEM_PAGE_SIZE;
+        uint32_t    copy_size = MEM_PAGE_SIZE - page_offset;
+
+        if (copy_size > size) {
+            copy_size = size;
+        }
+
+        if (pte.valid
+            && !pte.device) {
+            mem_buffer_t *bp = mem_buffers + pte.id;
+            if (bp->buf) {
+                uint32_t buffer_offset = address - bp->base;
+                memcpy(bp->buf + buffer_offset, buffer, copy_size);
+            }
+        }
+        address += copy_size;
+        buffer += copy_size;
+        size -= copy_size;
     }
 }
 

@@ -270,11 +270,10 @@ device_handler_func_type = CFUNCTYPE(c_uint, c_uint, c_uint, c_uint, c_uint)
 trace_handler_func_type = CFUNCTYPE(None, c_uint, c_uint, c_uint, c_uint)
 
 
-def mem_add_memory(base, size, writable=True, with_bytes=None):
+def mem_add_memory(base, size, writable=True):
     return lib.mem_add_memory(c_uint(base),
                               c_uint(size),
-                              c_bool(writable),
-                              c_char_p(with_bytes))
+                              c_bool(writable))
 
 
 def mem_add_device(base, size):

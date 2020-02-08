@@ -32,7 +32,7 @@ typedef void (*mem_trace_handler_t)(mem_operation_t operation,
                                     uint32_t size,
                                     uint32_t value);
 
-bool mem_add_memory(uint32_t base, uint32_t size, bool writable, const void *with_bytes);
+bool mem_add_memory(uint32_t base, uint32_t size, bool writable);
 bool mem_add_device(uint32_t base, uint32_t size);
 
 void mem_set_device_handler(mem_device_handler_t handler);
