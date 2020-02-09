@@ -151,12 +151,13 @@ mem_read(uint32_t address, uint32_t size)
     }
     if (mem_bus_error_enabled) {
         m68k_pulse_bus_error();
+        m68k_end_timeslice();
     }
     fprintf(stderr, "bad read 0x%x: pte %svalid, %s, id %d\n", 
             address, pte.valid ? "" : "in", pte.device ? "dev" : "mem", pte.id);
     mem_dump_pagetable();
     mem_trace(INVALID_READ, address, size, ~(uint32_t)0);
-    return ~(uint32_t)0;
+    return 0;
 }
 
 static void
@@ -195,6 +196,7 @@ mem_write(uint32_t address, uint32_t size, uint32_t value)
     }
     if (mem_bus_error_enabled) {
         m68k_pulse_bus_error();
+        m68k_end_timeslice();
     }
     fprintf(stderr, "bad write 0x%x=0x%x: pte %svalid, %s, id %d\n", 
             address,
@@ -364,7 +366,7 @@ mem_read_memory(uint32_t address, uint32_t size)
             }
         }
     }
-    return ~(uint32_t)0;
+    return 0;
 }
 
 void

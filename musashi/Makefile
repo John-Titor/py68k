@@ -12,6 +12,9 @@ CC = gcc
 SO_EXT = so
 endif
 
+#OPT = -g
+OPT = -O3 -g
+
 SRC = memory.c callbacks.c m68kcpu.c m68kdasm.c softfloat/softfloat.c
 HDR = memory.h m68k.h m68kcpu.h m68kconf.h
 
@@ -38,7 +41,7 @@ $(GEN_FILES): $(GEN_TOOL) $(GEN_INPUT)
 	./$(GEN_TOOL)
 
 $(LIB): $(ALL_SRC) $(ALL_HDR)
-	$(CC) -O3 -fPIC -shared -o $@ $(ALL_SRC)
+	$(CC) $(OPT) -fPIC -shared -o $@ $(ALL_SRC)
 
 clean:
 	rm -f $(GEN_TOOL) $(GEN_FILES) $(LIB)

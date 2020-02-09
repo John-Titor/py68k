@@ -9,8 +9,9 @@ import importlib
 from pathlib import Path
 
 from emulator import Emulator
-from device import Device, RootDevice
-from console import Console
+from device import Device
+from systemdevices import RootDevice
+from consoleserver import ConsoleServer
 
 
 # Parse commandline arguments
@@ -45,7 +46,7 @@ if args.list_targets:
     sys.exit(0)
 
 if args.console_server:
-    Console().run()
+    ConsoleServer().run()
     sys.exit(0)
 
 if args.target is not None:

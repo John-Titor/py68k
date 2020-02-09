@@ -20,7 +20,7 @@ class ELFImage(object):
     Program image in the emulator
     """
 
-    def __init__(self, image_filename):
+    def __init__(self, image_filename, symbols_only=False):
         """
         Read the ELF headers and parse the executable
         """
@@ -29,6 +29,8 @@ class ELFImage(object):
         self._name_cache = dict()       # names are unique, entries are subdicts with 'address' and 'size'
         self._address_cache = dict()    # addresses are not unique, entries are lists of names at that address
         self._symbol_index = None       # sorted list of unique symbol addresses + sentinel
+
+        self._symbols_only = symbols_only
         self._relocation = 0
 
         self._elf = ELFFile(open(image_filename, "rb"))
@@ -46,17 +48,18 @@ class ELFImage(object):
 
         # look for a stack
         stack_size = None
-        for segment in self._elf.iter_segments():
-            if segment['p_type'] == 'PT_GNU_STACK':
-                stack_size = segment['p_memsz']
-        if stack_size is None:
-            print(f'WARNING: no stack defined in {image_filename}')
-        else:
-            try:
-                stack_base = self._name_cache['_end']['address']
-            except KeyError:
-                raise RuntimeError('no _end symbol, cannot locate stack')
-            self._add_symbol('__STACK__', stack_base, stack_size)
+        if not self._symbols_only:
+            for segment in self._elf.iter_segments():
+                if segment['p_type'] == 'PT_GNU_STACK':
+                    stack_size = segment['p_memsz']
+            if stack_size is None:
+                raise RuntimeError(f'no stack defined in {self._name} - did you forget to link with -z stack-size=VALUE?')
+            else:
+                try:
+                    stack_base = self._name_cache['_end']['address']
+                except KeyError:
+                    raise RuntimeError('no _end symbol, cannot locate stack')
+                self._add_symbol('__STACK__', stack_base, stack_size)
 
         # sort symbol addresses to make index
         self._symbol_index = sorted(self._address_cache.keys())
@@ -71,6 +74,8 @@ class ELFImage(object):
             self._address_cache[address] = [name]
 
     def _get_loadable_sections(self):
+        if self._symbols_only:
+            raise RuntimeError(f'loaded for symbols-only')
         loadable_sections = dict()
         for section in self._elf.iter_sections():
             if section['sh_flags'] & SH_FLAGS.SHF_ALLOC:
@@ -82,6 +87,7 @@ class ELFImage(object):
         loadable_sections = self._get_loadable_sections()
 
         # iterate relocation sections
+        did_relocate = False
         for section in self._elf.iter_sections():
             if not isinstance(section, RelocationSection):
                 continue
@@ -100,14 +106,18 @@ class ELFImage(object):
                 if reloc['r_info_type'] != R_68K_32:
                     continue
 
+                # find the section containing the address that needs to be fixed up
                 reloc_address = reloc['r_offset']
-
                 for sec_base, sec_data in loadable_sections.items():
                     sec_offset = reloc_address - sec_base
                     if (sec_base <= reloc_address) and (sec_offset < len(sec_data)):
                         unrelocated_value = struct.unpack_from('>L', sec_data, sec_offset)[0]
                         struct.pack_into('>L', sec_data, sec_offset, unrelocated_value + relocation)
+                        did_relocate = True
                         break
+
+        if not did_relocate:
+            raise RuntimeError(f'no relocations in {self._name} - did you forget to link with --emit-relocs?')
 
         relocated_sections = dict()
         for sec_base, sec_data in loadable_sections.items():
@@ -118,10 +128,14 @@ class ELFImage(object):
 
     @property
     def entrypoint(self):
+        if self._symbols_only:
+            raise RuntimeError(f'loaded for symbols-only')
         return self._elf.header['e_entry'] + self._relocation
 
     @property
     def initstack(self):
+        if self._symbols_only:
+            raise RuntimeError(f'loaded for symbols-only')
         if self._stack_size is not None:
             end, _ = self.get_symbol_range('_end')
             return end + self._relocation + self._stack_size

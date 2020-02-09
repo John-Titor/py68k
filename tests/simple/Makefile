@@ -1,5 +1,6 @@
 CC		 = m68k-unknown-elf-gcc
-PROG		 = hello
+SIZE		 = m68k-unknown-elf-size
+PROG		 = test
 
 ELF		 = $(PROG).elf
 SRCS		 = $(wildcard *.c)
@@ -11,21 +12,22 @@ CFLAGS		 = -m68010 \
 		   -Os \
 		   -fomit-frame-pointer \
 		   -ffreestanding \
-		   -nostdlib \
+		   -nostartfiles \
 		   -ffunction-sections \
 		   -fdata-sections \
 		   -Wl,-gc-sections \
 		   -Wl,--emit-relocs \
-		   -Wl,-z,stack-size=1024 \
+		   -Wl,-z,stack-size=1048576 \
 		   -Wl,--section-start=.text=0 \
 		   -MD \
 		   -e main
 
 $(ELF): $(SRCS) $(MAKEFILE_LIST)
 	$(CC) -o $@ $(CFLAGS) $(SRCS)
+	@$(SIZE) $@
 
 .PHONY: clean
 clean:
-	rm -f $(ELF)
+	rm -f $(ELF) *.d
 
 -include *.d

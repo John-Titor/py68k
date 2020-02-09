@@ -3,17 +3,23 @@
  */
 
 #include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
+
+// MMIO registers ////////////////////////////////////////////////////////////
 
 #define REG8(_x)            (*(volatile uint8_t *)(_x))
 #define REG16(_x)           (*(volatile uint16_t *)(_x))
 #define REG32(_x)           (*(volatile uint32_t *)(_x))
+
+// Vectors ///////////////////////////////////////////////////////////////////
 
 #if defined(__mc68010) || defined(__mc68020) || defined(__mc68030) || defined(__mc68040)
 static inline uint32_t get_vbr() { uint32_t value; __asm__ volatile ("movec %%vbr, %0" : "=r" (value) : :); return value;}
 static inline uint32_t set_vbr() { uint32_t value; __asm__ volatile ("movec %0, %%vbr" : : "r" (value) :); return value;}
 # define VECTOR_BASE    get_vbr()
 #else
-# define VECTOR_BASE    0
+# define VECTOR_BASE    (uint32_t)0
 #endif
 
 typedef void    (*exception_handler_t)(void);
@@ -36,12 +42,15 @@ typedef void    (*exception_handler_t)(void);
 #define VEC_TRAP(_y)        VECTOR(32 + (_y))   // TRAP instruction vectors (0-15)
 #define VEC_USER(_y)        VECTOR(64 + (_y))   // User interrupt vectors (0-63)
 
+// Startup code //////////////////////////////////////////////////////////////
+
+extern uint32_t __bss_start;
+extern uint32_t _end;
+
 /* call this at the head of main() to clear the BSS */
 static inline void
 early_main()
 {
-    extern uint32_t __bss_start;
-    extern uint32_t _end;
     volatile uint32_t *ptr = &__bss_start;
 
     while (ptr < &_end) {
@@ -58,30 +67,49 @@ early_main()
     }
 }
 
-#define set_sr(a)                         		\
-    __extension__                             	\
-    ({short _r, _a = (a);                     	\
-        __asm__ volatile                        \
-        ("move.w %%sr,%0\n\t"                   \
-         "move.w %1,%%sr"                       \
-         : "=&d"(_r)        /* outputs */       \
-         : "nd"(_a)         /* inputs  */       \
-         : "cc", "memory"   /* clobbered */     \
-        );                                      \
-        _r;                                     \
-    })
+// Interrupt en/disable //////////////////////////////////////////////////////
 
-static inline void
-disable_interrupts()
+static inline uint16_t
+get_sr()
 {
-	set_sr(0x2700);
+    uint16_t result;
+    __asm__ volatile (
+        "move.w %%sr, %0"
+        : "=d" (result)
+        :
+        : "memory"
+    );
+    return result;
 }
 
 static inline void
-enable_interrupts()
+set_sr(uint16_t value)
 {
-	set_sr(0x2000);
+    __asm__ volatile (
+        "move.w %0, %%sr"
+        :
+        : "d" (value)
+        : "memory"
+    );
 }
+
+static inline bool
+interrupt_disable()
+{
+    bool state = ((get_sr() & 0x0700) == 0);
+    set_sr(0x2700);
+    return state;
+}
+
+static inline void
+interrupt_enable(bool enable)
+{
+    if (enable) {
+        set_sr(0x2000);
+    }
+}
+
+// Emulator 'native features' ////////////////////////////////////////////////
 
 extern bool			_detect_native_features(void);
 extern uint32_t		_nfID(const char *);
@@ -132,6 +160,7 @@ __asm__
 );
 
 static uint32_t
+__unused
 nf_id(const char *method)
 {
     static bool probed, supported;
@@ -147,6 +176,7 @@ nf_id(const char *method)
 }
 
 static void
+__unused
 nf_puts(const char *str)
 {
     static uint32_t nfid_stderr = 0;
@@ -161,6 +191,24 @@ nf_puts(const char *str)
 }
 
 static void
+__unused
+nf_write(char *buf, int len)
+{
+	static const int lbsize = 32;
+	char lbuf[lbsize + 1];
+
+	while (len) {
+		int cnt = (len < lbsize) ? len : lbsize;
+		memcpy(lbuf, buf, cnt);
+		lbuf[cnt] = 0;
+		nf_puts(lbuf);
+		len -= cnt;
+		buf += cnt;
+	}
+}
+
+static void
+__unused
 nf_exit()
 {
     static uint32_t nfid_shutdown = 0;

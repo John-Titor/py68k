@@ -47,6 +47,7 @@ class UART(Device):
     def _read_dr(self):
         if len(self._rxfifo) > 0:
             return self._rxfifo.popleft()
+            self._update_ipl()
         return 0
 
     def _write_dr(self, value):
@@ -58,6 +59,7 @@ class UART(Device):
 
     def _write_cr(self, value):
         self._cr = value
+        self._update_ipl()
 
     def _read_vr(self):
         return self._vr
@@ -70,37 +72,30 @@ class UART(Device):
         self._vr = 0
         self._cr = 0
 
-    def get_interrupt(self):
-        if self._interrupting:
-            return self._interrupt
-        return 0
+    def _update_ipl(self):
+        if (self._cr & UART.CR_TX_INTEN):
+            self.assert_ipl()
+        elif (self._cr & UART.CR_RX_INTEN) and len(self._rxfifo) > 0:
+            self.assert_ipl()
+        else:
+            self.deassert_ipl()
 
     def get_vector(self, interrupt):
-        if self._interrupting and (interrupt == self._interrupt):
-            if self._vr > 0:
-                return self._vr
-            return m68k.IRQ_AUTOVECTOR
-        return m68k.IRQ_SPURIOUS
-
-    @property
-    def _interrupting(self):
-        if (self._cr & UART.CR_TX_INTEN):
-            return True
-        if (self._cr & UART.CR_RX_INTEN) and len(self._rxfifo) > 0:
-            return True
-        return False
+        if self._vr > 0:
+            return self._vr
+        return m68k.IRQ_AUTOVECTOR
 
     def _handle_console_input(self, input):
         for c in input:
             self._rxfifo.append(c)
+        self._update_ipl()
 
 
 class Timer(Device):
     """
-    A simple up-counting timer with programmable period
+    A simple timebase; reports absolute time in microseconds, and counts down
+    microseconds and generates an interrupt.
     """
-
-    CONTROL_INTEN = 0x01
 
     def __init__(self, args, **options):
         super(Timer, self).__init__(args=args,
@@ -109,82 +104,54 @@ class Timer(Device):
                                     **options)
 
         self.add_registers([
-            ('PERIOD',  0x00, m68k.MEM_SIZE_32, self._read_period,  self._write_period),
-            ('COUNT',   0x04, m68k.MEM_SIZE_32, self._read_count,   None),
-            ('CONTROL', 0x09, m68k.MEM_SIZE_8,  self._read_control, self._write_control),
-            ('VECTOR',  0x0b, m68k.MEM_SIZE_8,  self._read_vector,  self._write_vector),
+            ('COUNT',   0x00, m68k.MEM_SIZE_32, self._read_timebase, self._write_countdown),
+            ('VECTOR',  0x05, m68k.MEM_SIZE_8,  self._read_vector,  self._write_vector),
         ])
-        self._divisor = int(self.cycle_rate / 1000000)  # 1MHz base clock
+        self._scaler = int(self.cycle_rate / 1000000)  # 1MHz base clock
         self.reset()
 
     @classmethod
     def add_arguments(self, parser):
         pass
 
-    def _read_period(self):
-        return self._r_period
-
-    def _read_count(self):
-        self.tick()
-        return self._r_count
-
-    def _read_control(self):
-        return self._r_control
+    def _read_timebase(self):
+        return int(self.current_cycle / self._scaler)
 
     def _read_vector(self):
         return self._r_vector
 
-    def _write_period(self, value):
-        self._r_period = value
-        self._r_count = 0
-        self._period = (self._r_period + 1) * self._divisor
-        self._epoch = self.current_cycle
-        self._last_iack = self._epoch
-        self._interrupting = False
-
-    def _write_control(self, value):
-        self._r_control = value
+    def _write_countdown(self, value):
+        if value == 0:
+            self.deassert_ipl()
+            self._deadline = 0
+            self.callback_cancel('count')
+            self.trace('timer cancelled')
+        else:
+            self._deadline = self.current_cycle + value * self._scaler
+            self.callback_at(self._deadline, 'count', self._callback)
+            self.trace(f'timer set for {self._deadline}, now {self.current_cycle}')
 
     def _write_vector(self, value):
         self._r_vector = value
 
-    def tick(self):
-        self.tick_deadline = 0
-        # do nothing if we are disabled
-        count = self.current_cycle - self._epoch
-        self._r_count = int((count % self._period) / self._divisor)
-
-        if self._r_control & Timer.CONTROL_INTEN:
-            if not self._interrupting:
-                iack_loop = int(self._last_iack / self._period)
-                this_loop = int(self.current_cycle / self._period)
-                if this_loop > iack_loop:
-                    self._interrupting = true
-                else:
-                    self.tick_deadline = (this_loop + 1) * self._period
-        else:
-            self._interrupting = False
+    def _callback(self):
+        if (self._deadline > 0):
+            if (self._deadline <= self.current_cycle):
+                self.trace('timer expired')
+                self.assert_ipl()
+                self._deadline = 0
+            else:
+                self.trace('spurious callback')
+                self.callback_at(self._deadline, 'count', self._callback)
 
     def reset(self):
-        self._r_period = 0
-        self._r_count = 0
-        self._r_control = 0
+        self._deadline = 0
         self._r_vector = 0
-        self._epoch = 0
-        self._period = self._divisor
-        self._last_iack = 0
-
-    def get_interrupt(self):
-        self.tick()
-        if self._interrupting:
-            return self._interrupt
-        return 0
+        self.deassert_ipl()
+        self.callback_cancel('count')
 
     def get_vector(self, interrupt):
-        if self._interrupting and (interrupt == self._interrupt):
-            self._last_iack = self.current_cycle
-            self._interrupting = False
-            if self._vector > 0:
-                return self._vector
-            return m68k.IRQ_AUTOVECTOR
-        return m68k.IRQ_SPURIOUS
+        self.deassert_ipl()
+        if self._r_vector > 0:
+            return self._r_vector
+        return m68k.IRQ_AUTOVECTOR

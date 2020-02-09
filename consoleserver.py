@@ -8,7 +8,7 @@ import signal
 import time
 
 
-class Console():
+class ConsoleServer():
     """
     console server
     """
@@ -61,7 +61,7 @@ class Console():
         self._vt_screen.attach(self._vt_stream)
         self._buffered_output = u''
 
-        self._vt_stream.process(Console.banner)
+        self._vt_stream.process(ConsoleServer.banner)
 
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -89,16 +89,21 @@ class Console():
         self._selector.register(self._connection, selectors.EVENT_READ, self._read)
 
     def _read(self, conn, mask):
-        data = self._connection.recv(100)
-        if data:
-            for c in data:
-                self._handle_output(c)
-        else:
-            # connection lost
-            self._selector.unregister(self._connection)
-            self._connection.close()
-            self._connection = None
-            self._vt_stream.process(Console.banner)
+        try:
+            data = self._connection.recv(100)            
+            if data:
+                for c in data:
+                    self._handle_output(c)
+                return
+        except ConnectionResetError:
+            # same as reading nothing
+            pass
+
+        # connection lost
+        self._selector.unregister(self._connection)
+        self._connection.close()
+        self._connection = None
+        self._vt_stream.process(ConsoleServer.banner)
 
     def _fmt(self, val):
         str = f'{val:#02x} \'{curses.keyname(val)}\''
@@ -134,10 +139,10 @@ class Console():
 
         input = self._win.getch()
         if input != -1:
-            if input in Console.input_keymap:
+            if input in ConsoleServer.input_keymap:
                 # self.trace('translate {} -> {}'.format(input,
-                #                                        Console.input_keymap[input]))
-                for c in Console.input_keymap[input]:
+                #                                        ConsoleServer.input_keymap[input]))
+                for c in ConsoleServer.input_keymap[input]:
                     self._handle_input(ord(c))
             else:
                 self._handle_input(input)

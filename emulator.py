@@ -4,7 +4,8 @@ import signal
 import traceback
 
 from imageELF import ELFImage
-from device import RootDevice
+from device import Device
+from systemdevices import RootDevice
 from musashi import m68k
 
 
@@ -60,7 +61,6 @@ class Emulator(object):
         self._dead = False
         self._exception_info = None
         self._postmortem = None
-        self._root_device = None
 
         # initialise tracing
         self._trace_file = open(args.trace_file, "w", 1)
@@ -77,7 +77,8 @@ class Emulator(object):
         self._elapsed_cycles = 0
         self._device_deadline = 0
         self._default_quantum = int(self._cpu_frequency / 1000)  # ~1ms in cycles
-        self._device_tick_deadline = 0
+        self._device_callback_at = 0
+        self._device_callback_fn = None
 
         # reset callbacks
         self._reset_hooks = list()
@@ -109,6 +110,9 @@ class Emulator(object):
         else:
             self._cycle_limit = sys.maxsize
 
+        if not args.disable_bus_error:
+            m68k.mem_enable_bus_error(True)
+
         # load an executable?
         if args.load is not None:
             self._load_image = ELFImage(args.load)
@@ -118,10 +122,10 @@ class Emulator(object):
         # add symbol files
         if args.symbols is not None:
             for symfile in args.symbols:
-                self._symbol_files.append(ELFImage(symfile))
+                self._symbol_files.append(ELFImage(symfile, symbols_only=True))
 
         # wire up the root device
-        self.add_device(args, RootDevice)
+        self.add_device(args, RootDevice, emulator=self)
 
     @classmethod
     def add_arguments(cls, parser, default_load_address=0x400):
@@ -164,21 +168,10 @@ class Emulator(object):
                             metavar='LOAD-ADDRESS',
                             default=default_load_address,
                             help='relocate loaded ELF programs to this address before running')
-
-    def loadImage(self, image_filename):
-        try:
-            suffix = image_filename.split('.')[1].lower()
-        except Exception:
-            raise RuntimeError(f"image filename '{image_filename}' must have an extension")
-
-        if suffix == "elf":
-            image = imageELF.image(self, image_filename)
-        elif suffix == "bin":
-            image = imageBIN.image(self, image_filename)
-        else:
-            raise RuntimeError(f"image filename '{image.filename}' must end in .elf or .bin")
-
-        return image
+        parser.add_argument('--disable-bus-error',
+                            action='store_true',
+                            default=False,
+                            help='disable generation of bus error on any bad memory access')
 
     def run(self):
         if self._load_image is not None:
@@ -204,38 +197,46 @@ class Emulator(object):
 
         self._start_time = time.time()
         while not self._dead:
-            self._root_device.tick_all()
 
             quantum = self._default_quantum
-            if self._device_tick_deadline > self._elapsed_cycles:
-                if (self._elapsed_cycles + quantum) > self._device_tick_deadline:
-                    quantum = self._device_tick_deadline - self._elapsed_cycles
+            if self._device_callback_at > self._elapsed_cycles:
+                if (self._elapsed_cycles + quantum) > self._device_callback_at:
+                    quantum = self._device_callback_at - self._elapsed_cycles
 
-            self.trace('RUN', info=f'quantum {quantum} cycles')
-            self._elapsed_cycles += m68k.execute(quantum)
+            self.trace('RUN', info=f'quantum {quantum} cycles @ {self._elapsed_cycles}')
+            run_count = m68k.execute(quantum)
+            self.trace('STOP', info=f'ran for {run_count} cycles')
+            self._elapsed_cycles += run_count
 
             if self._elapsed_cycles > self._cycle_limit:
                 self.fatal('cycle limit exceeded')
 
+            if (self._device_callback_at > 0) and (self._elapsed_cycles >= self._device_callback_at):
+                self.trace('CALLBACK', 
+                           info=f'invoking device callback {self._elapsed_cycles - self._device_callback_at} cycles late.')
+                self._device_callback_at = 0
+                self._device_callback_fn()
+
     def finish(self):
         elapsed_time = time.time() - self._start_time
-        self.trace('END', info='{} cycles in {} seconds, {} cps'.format(self.current_cycle,
-                                                                        elapsed_time,
-                                                                        int(self.current_cycle / elapsed_time)))
+        self.trace('END',
+                   info=f'{self.current_cycle} cycles in {elapsed_time} seconds, {int(self.current_cycle / elapsed_time)} cps')
         try:
             self._trace_file.flush()
             self._trace_file.close()
         except Exception:
             pass
 
-    def schedule_device_tick(self, deadline):
-        self._device_tick_deadline = deadline
-        if (self.current_cycle + m68k.cycles_remaining()) > deadline:
-            modify_timeslice(deadline - self.current_cycle)
+    def set_device_callback(self, device_callback_at, device_callback_fn):
+        self.trace('CB', info=f'deadline {device_callback_at} now {self.current_cycle}')
+        if device_callback_at <= self.current_cycle:
+            raise RuntimeError(f'device attempted to set callback in the past')
 
-    def set_quantum(self, new_quantum):
-        if (new_quantum > 0) and (new_quantum < self._next_quantum):
-            self._next_quantum = new_quantum
+        self._device_callback_at = device_callback_at
+        callback_after = device_callback_at - self.current_cycle
+        if callback_after < m68k.cycles_remaining():
+            m68k.modify_timeslice(callback_after)
+        self._device_callback_fn = device_callback_fn
 
     def add_memory(self, base, size, writable=True, from_file=None):
         """
@@ -253,15 +254,9 @@ class Emulator(object):
 
     def add_device(self, args, dev, **options):
         """
-        Attach a device to the emulator at the given offset in device space
+        Attach a device to the emulator
         """
-        if self._root_device is None:
-            self._root_device = dev(args=args, emu=self, **options)
-            self._root_device.add_system_devices(args)
-        else:
-            self._root_device.add_device(args=args,
-                                         dev=dev,
-                                         **options)
+        Device.add_device(args, dev, **options)
 
     def add_reset_hook(self, hook):
         """
@@ -399,7 +394,7 @@ class Emulator(object):
         # call reset hooks
         for hook in self._reset_hooks:
             try:
-                hook(self)
+                hook()
             except Exception:
                 self.fatal_exception(sys.exc_info())
 
@@ -408,10 +403,8 @@ class Emulator(object):
         Illegal instruction handler - implement 'native features' emulator API
         """
         if instr == 0x7300:     # nfID
-            self.trace('nFID')
             return self._nfID(m68k.get_reg(self.registers['SP']) + 4)
         elif instr == 0x7301:     # nfCall
-            self.trace('nFCall')
             return self._nfCall(m68k.get_reg(self.registers['SP']) + 4)
 
         # instruction not handled by emulator, legitimately illegal
