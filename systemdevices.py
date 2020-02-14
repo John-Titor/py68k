@@ -1,3 +1,7 @@
+#
+# Emulator-specific pseudo-devices
+#
+
 import sys
 import os
 import socket
@@ -43,7 +47,7 @@ class SocketConsole(Device):
                                     selectors.EVENT_READ,
                                     self._recv)
         except ConnectionRefusedError as e:
-            self._emu.fatal('console server not listening, run \'py68k.py --console-server\' in another window.')
+            self.emu.fatal('console server not listening, run \'py68k.py --console-server\' in another window.')
 
         super().register_console_output_handler(self._send)
         self.callback_after(self.cycle_rate / 100, 'console', self._check_socket)
@@ -61,8 +65,8 @@ class SocketConsole(Device):
     def _recv(self, conn, mask):
         input = conn.recv(10)
         if len(input) == 0:
-            self._emu.fatal('console server disconnected')
-        self._super.console_handle_input(input)
+            self.emu.fatal('console server disconnected')
+        super().console_handle_input(input)
 
 
 class StdoutConsole(Device):

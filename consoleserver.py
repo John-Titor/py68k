@@ -1,3 +1,7 @@
+#
+# Console server application - listens on port 6809 and emulates a VT102
+#
+
 import sys
 import os
 import curses
@@ -90,7 +94,7 @@ class ConsoleServer():
 
     def _read(self, conn, mask):
         try:
-            data = self._connection.recv(100)            
+            data = self._connection.recv(100)
             if data:
                 for c in data:
                     self._handle_output(c)

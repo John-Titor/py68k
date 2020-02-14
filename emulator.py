@@ -1,3 +1,7 @@
+#
+# Core emulator logic
+#
+
 import time
 import sys
 import signal

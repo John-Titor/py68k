@@ -39,16 +39,19 @@ actiongroup.add_argument('--console-server',
 
 (args, _) = parser.parse_known_args()
 
+# handle --list-targets
 if args.list_targets:
     p = Path('targets')
     for module in p.glob('*.py'):
         print(f'    {module.stem}')
     sys.exit(0)
 
+# handle --console-server
 if args.console_server:
     ConsoleServer().run()
     sys.exit(0)
 
+# if --target specified, load target & populate target-specific args
 if args.target is not None:
     target = importlib.import_module('targets.' + args.target)
     Emulator.add_arguments(parser)

@@ -16,6 +16,7 @@ Things to investigate / fix:
   ✔ newlib sbrk is busted; make stack bigger (room for stack + heap) & grow up from _end @done (20-02-08 23:32)
   ☐ exceptions in callbacks seem to trash the emulator state; probably better to hard-abort out of them
   ☐ decide between public attributes and property methods. Device._name, size, address - anything not computed.
+  ☐ lots of Emulator functionality needs an instance, but that's inconvenient; maybe classmethods? module-level functions?
   
 Features:
   ✔ need new memory model, support multiple disjoint memories (RAM, ROM), > 16MiB @done (20-01-28 15:54)
