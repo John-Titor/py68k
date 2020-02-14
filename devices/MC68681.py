@@ -1,5 +1,5 @@
 import sys
-from device import Device
+from device import Device, Register
 from collections import deque
 
 from musashi import m68k
@@ -163,41 +163,65 @@ class MC68681(Device):
 
         if options['register_arrangement'] == '16-bit':
             self.add_registers([
-                ('MRA',            0x00, m68k.MEM_SIZE_8, self._a.read_mr,    self._a.write_mr),
-                ('SRA/CSRA',       0x02, m68k.MEM_SIZE_8, self._a.read_sr,    self._a.write_csr),
-                ('CRA',            0x04, m68k.MEM_SIZE_8, self._read_nop,     self._a.write_cr),
-                ('RBA/TBA',        0x06, m68k.MEM_SIZE_8, self._a.read_rb,    self._a.write_tb),
-                ('IPCR/ACR',       0x08, m68k.MEM_SIZE_8, self._read_ipcr,    self._write_acr),
-                ('ISR/IMR',        0x0a, m68k.MEM_SIZE_8, self._read_isr,     self._write_imr),
-                ('CUR/CTUR',       0x0c, m68k.MEM_SIZE_8, self._read_cur,     self._write_ctur),
-                ('CLR/CTLR',       0x0e, m68k.MEM_SIZE_8, self._read_clr,     self._write_ctlr),
-                ('MRB',            0x10, m68k.MEM_SIZE_8, self._b.read_mr,    self._b.write_mr),
-                ('SRB/CSRB',       0x12, m68k.MEM_SIZE_8, self._b.read_sr,    self._b.write_csr),
-                ('CRB',            0x14, m68k.MEM_SIZE_8, self._read_nop,     self._b.write_cr),
-                ('RBB/TBB',        0x16, m68k.MEM_SIZE_8, self._b.read_rb,    self._b.write_tb),
-                ('IVR',            0x18, m68k.MEM_SIZE_8, self._read_ivr,     self._write_ivr),
-                ('IPR/OPCR',       0x1a, m68k.MEM_SIZE_8, self._read_ipr,     self._write_nop),
-                ('STARTCC/OPRSET', 0x1c, m68k.MEM_SIZE_8, self._read_startcc, self._write_nop),
-                ('STOPCC/OPRCLR',  0x1e, m68k.MEM_SIZE_8, self._read_stopcc,  self._write_nop),
+                ('MRA',         0x00, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._a.read_mr),
+                ('SRA',         0x02, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._a.read_sr),
+                ('RBA',         0x06, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._a.read_rb),
+                ('IPCR',        0x08, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_ipcr),
+                ('ISR',         0x0a, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_isr),
+                ('CUR',         0x0c, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_cur),
+                ('CLR',         0x0e, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_clr),
+                ('MRB',         0x10, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._b.read_mr),
+                ('SRB',         0x12, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._b.read_sr),
+                ('RBB',         0x16, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._b.read_rb),
+                ('IVR',         0x18, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_ivr),
+                ('IPR',         0x1a, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_ipr),
+                ('STARTCC',     0x1c, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_startcc),
+                ('STOPCC',      0x1e, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_stopcc),
+
+                ('MRA',         0x00, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._a.write_mr),
+                ('CSRA',        0x02, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._a.write_csr),
+                ('CRA',         0x04, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._a.write_cr),
+                ('TBA',         0x06, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._a.write_tb),
+                ('ACR',         0x08, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_acr),
+                ('IMR',         0x0a, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_imr),
+                ('CTUR',        0x0c, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_ctur),
+                ('CTLR',        0x0e, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_ctlr),
+                ('MRB',         0x10, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._b.write_mr),
+                ('CSRB',        0x12, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._b.write_csr),
+                ('CRB',         0x14, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._b.write_cr),
+                ('TBB',         0x16, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._b.write_tb),
+                ('IVR',         0x18, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_ivr),
             ])
         elif options['register_arrangement'] == '8-bit':
             self.add_registers([
-                ('MRA',            0x00, m68k.MEM_SIZE_8, self._a.read_mr,    self._a.write_mr),
-                ('SRA/CSRA',       0x01, m68k.MEM_SIZE_8, self._a.read_sr,    self._a.write_csr),
-                ('CRA',            0x02, m68k.MEM_SIZE_8, self._read_nop,     self._a.write_cr),
-                ('RBA/TBA',        0x03, m68k.MEM_SIZE_8, self._a.read_rb,    self._a.write_tb),
-                ('IPCR/ACR',       0x04, m68k.MEM_SIZE_8, self._read_ipcr,    self._write_acr),
-                ('ISR/IMR',        0x05, m68k.MEM_SIZE_8, self._read_isr,     self._write_imr),
-                ('CUR/CTUR',       0x06, m68k.MEM_SIZE_8, self._read_cur,     self._write_ctur),
-                ('CLR/CTLR',       0x07, m68k.MEM_SIZE_8, self._read_clr,     self._write_ctlr),
-                ('MRB',            0x08, m68k.MEM_SIZE_8, self._b.read_mr,    self._b.write_mr),
-                ('SRB/CSRB',       0x09, m68k.MEM_SIZE_8, self._b.read_sr,    self._b.write_csr),
-                ('CRB',            0x0a, m68k.MEM_SIZE_8, self._read_nop,     self._b.write_cr),
-                ('RBB/TBB',        0x0b, m68k.MEM_SIZE_8, self._b.read_rb,    self._b.write_tb),
-                ('IVR',            0x0c, m68k.MEM_SIZE_8, self._read_ivr,     self._write_ivr),
-                ('IPR/OPCR',       0x0d, m68k.MEM_SIZE_8, self._read_ipr,     self._write_nop),
-                ('STARTCC/OPRSET', 0x0e, m68k.MEM_SIZE_8, self._read_startcc, self._write_nop),
-                ('STOPCC/OPRCLR',  0x0f, m68k.MEM_SIZE_8, self._read_stopcc,  self._write_nop),
+                ('MRA',         0x00, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._a.read_mr),
+                ('SRA',         0x01, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._a.read_sr),
+                ('RBA',         0x03, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._a.read_rb),
+                ('IPCR',        0x04, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_ipcr),
+                ('ISR',         0x05, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_isr),
+                ('CUR',         0x06, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_cur),
+                ('CLR',         0x07, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_clr),
+                ('MRB',         0x08, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._b.read_mr),
+                ('SRB',         0x09, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._b.read_sr),
+                ('RBB',         0x0b, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._b.read_rb),
+                ('IVR',         0x0c, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_ivr),
+                ('IPR',         0x0d, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_ipr),
+                ('STARTCC',     0x0e, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_startcc),
+                ('STOPCC',      0x0f, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_stopcc),
+
+                ('MRA',         0x00, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._a.write_mr),
+                ('CSRA',        0x01, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._a.write_csr),
+                ('CRA',         0x02, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._a.write_cr),
+                ('TBA',         0x03, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._a.write_tb),
+                ('ACR',         0x04, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_acr),
+                ('IMR',         0x05, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_imr),
+                ('CTUR',        0x06, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_ctur),
+                ('CTLR',        0x07, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_ctlr),
+                ('MRB',         0x08, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._b.write_mr),
+                ('CSRB',        0x09, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._b.write_csr),
+                ('CRB',         0x0a, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._b.write_cr),
+                ('TBB',         0x0b, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._b.write_tb),
+                ('IVR',         0x0c, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_ivr),
             ])
         else:
             raise RuntimeError(f'register_arrangement {options["register_arrangement"]} not recognized')
@@ -234,7 +258,7 @@ class MC68681(Device):
             self.callback_at(self._counter_deadline, 'counter/timer', self._callback)
         else:
             self._timer_epoch = self.current_cycle
-            deadline = self._timer_epoch + self._timer_period
+            deadline = int(self._timer_epoch + self._timer_period)
             self.trace(info=f'timer startcc, epoch {self._timer_epoch} deadline {deadline}')
             self.callback_at(deadline, 'counter/timer', self._callback)
 
@@ -253,14 +277,11 @@ class MC68681(Device):
         else:
             # round_up(self._current_cycle, self._timer_period)
             elapsed = self.current_cycle - self._timer_epoch
-            deadline = (int(elapsed / self._timer_period) + 1) * self._timer_period
+            deadline = int((int(elapsed / self._timer_period) + 1) * self._timer_period)
             self.trace(info=f'timer stopcc, epoch {self._timer_epoch} deadline {deadline}')
             self.callback_at(deadline, 'counter/timer', self._callback)
 
         return 0xff
-
-    def _read_nop(self):
-        pass
 
     def _write_imr(self, value):
         self._imr = value
@@ -292,9 +313,6 @@ class MC68681(Device):
 
     def _write_ctur(self, value):
         self._reload = (self._reload & 0x00ff) | (value << 8)
-
-    def _write_nop(self, value):
-        pass
 
     def update_channel_isr(self, port, isr):
         if port == 'A':

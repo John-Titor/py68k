@@ -44,26 +44,45 @@ class CompactFlash(Device):
                                            **options)
         if options['register_arrangement'] == '16-bit':
             self.add_registers([
-                ('DATA16',         0x00, m68k.MEM_SIZE_16, self._read_data16,        self._write_data16),
-                ('DATA8',          0x01, m68k.MEM_SIZE_8,  self._read_data8,         self._write_data8),
-                ('ERROR/FEATURE',  0x03, m68k.MEM_SIZE_8,  self._read_error,         self._write_feature),
-                ('SECTOR_COUNT',   0x05, m68k.MEM_SIZE_8,  self._read_sector_count,  self._write_sector_count),
-                ('SECTOR_NUMBER',  0x07, m68k.MEM_SIZE_8,  self._read_sector_number, self._write_sector_number),
-                ('CYLINDER_LOW',   0x09, m68k.MEM_SIZE_8,  self._read_cylinder_low,  self._write_cylinder_low),
-                ('CYLINDER_HIGH',  0x0b, m68k.MEM_SIZE_8,  self._read_cylinder_high, self._write_cylinder_high),
-                ('DRIVE/HEAD',     0x0d, m68k.MEM_SIZE_8,  self._read_drive_head,    self._write_drive_head),
-                ('STATUS/COMMAND', 0x0f, m68k.MEM_SIZE_8,  self._read_status,        self._write_command),
+                ('DATA16',         0x00, m68k.MEM_SIZE_16, m68k.MEM_READ, self._read_data16),
+                ('DATA8',          0x01, m68k.MEM_SIZE_8,  m68k.MEM_READ, self._read_data8),
+                ('ERROR',          0x03, m68k.MEM_SIZE_8,  m68k.MEM_READ, self._read_error),
+                ('SECTOR_COUNT',   0x05, m68k.MEM_SIZE_8,  m68k.MEM_READ, self._read_sector_count),
+                ('SECTOR_NUMBER',  0x07, m68k.MEM_SIZE_8,  m68k.MEM_READ, self._read_sector_number),
+                ('CYLINDER_LOW',   0x09, m68k.MEM_SIZE_8,  m68k.MEM_READ, self._read_cylinder_low),
+                ('CYLINDER_HIGH',  0x0b, m68k.MEM_SIZE_8,  m68k.MEM_READ, self._read_cylinder_high),
+                ('DRIVE/HEAD',     0x0d, m68k.MEM_SIZE_8,  m68k.MEM_READ, self._read_drive_head),
+                ('COMMAND',        0x0f, m68k.MEM_SIZE_8,  m68k.MEM_READ, self._read_status),
+
+                ('DATA16',         0x00, m68k.MEM_SIZE_16, m68k.MEM_WRITE, self._write_data16),
+                ('DATA8',          0x01, m68k.MEM_SIZE_8,  m68k.MEM_WRITE, self._write_data8),
+                ('FEATURE',        0x03, m68k.MEM_SIZE_8,  m68k.MEM_WRITE, self._write_feature),
+                ('SECTOR_COUNT',   0x05, m68k.MEM_SIZE_8,  m68k.MEM_WRITE, self._write_sector_count),
+                ('SECTOR_NUMBER',  0x07, m68k.MEM_SIZE_8,  m68k.MEM_WRITE, self._write_sector_number),
+                ('CYLINDER_LOW',   0x09, m68k.MEM_SIZE_8,  m68k.MEM_WRITE, self._write_cylinder_low),
+                ('CYLINDER_HIGH',  0x0b, m68k.MEM_SIZE_8,  m68k.MEM_WRITE, self._write_cylinder_high),
+                ('DRIVE/HEAD',     0x0d, m68k.MEM_SIZE_8,  m68k.MEM_WRITE, self._write_drive_head),
+                ('COMMAND',        0x0f, m68k.MEM_SIZE_8,  m68k.MEM_WRITE, self._write_command),
             ])
         elif options['register_arrangement'] == '8-bit':
             self.add_registers([
-                ('DATA8',          0x00, m68k.MEM_SIZE_8,  self._read_data8,         self._write_data8),
-                ('ERROR/FEATURE',  0x01, m68k.MEM_SIZE_8,  self._read_error,         self._write_feature),
-                ('SECTOR_COUNT',   0x02, m68k.MEM_SIZE_8,  self._read_sector_count,  self._write_sector_count),
-                ('SECTOR_NUMBER',  0x03, m68k.MEM_SIZE_8,  self._read_sector_number, self._write_sector_number),
-                ('CYLINDER_LOW',   0x04, m68k.MEM_SIZE_8,  self._read_cylinder_low,  self._write_cylinder_low),
-                ('CYLINDER_HIGH',  0x05, m68k.MEM_SIZE_8,  self._read_cylinder_high, self._write_cylinder_high),
-                ('DRIVE/HEAD',     0x06, m68k.MEM_SIZE_8,  self._read_drive_head,    self._write_drive_head),
-                ('STATUS/COMMAND', 0x07, m68k.MEM_SIZE_8,  self._read_status,        self._write_command),
+                ('DATA8',          0x00, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_data8),
+                ('ERROR',          0x01, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_error),
+                ('SECTOR_COUNT',   0x02, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_sector_count),
+                ('SECTOR_NUMBER',  0x03, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_sector_number),
+                ('CYLINDER_LOW',   0x04, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_cylinder_low),
+                ('CYLINDER_HIGH',  0x05, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_cylinder_high),
+                ('DRIVE/HEAD',     0x06, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_drive_head),
+                ('STATUS',         0x07, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_status),
+
+                ('DATA8',          0x00, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_data8),
+                ('FEATURE',        0x01, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_feature),
+                ('SECTOR_COUNT',   0x02, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_sector_count),
+                ('SECTOR_NUMBER',  0x03, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_sector_number),
+                ('CYLINDER_LOW',   0x04, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_cylinder_low),
+                ('CYLINDER_HIGH',  0x05, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_cylinder_high),
+                ('DRIVE/HEAD',     0x06, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_drive_head),
+                ('COMMAND',        0x07, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_command),
             ])
         else:
             raise RuntimeError(f'register_arrangement {options["register_arrangement"]} not recognized')

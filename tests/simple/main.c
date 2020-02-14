@@ -31,7 +31,7 @@ __attribute__((interrupt))
 static void
 timer_handler()
 {
-    fprintf(stderr, "timer interrupt at %lu", TIMER_COUNT);
+    fprintf(stderr, "timer interrupt at %lu\n", TIMER_COUNT);
     timer_ticks++;
 }
 

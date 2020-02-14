@@ -23,10 +23,14 @@ class UART(Device):
                                    required_options=['address', 'interrupt'],
                                    **options)
         self.add_registers([
-            ('SR', 0x01, m68k.MEM_SIZE_8, self._read_sr, None),
-            ('DR', 0x03, m68k.MEM_SIZE_8, self._read_dr, self._write_dr),
-            ('CR', 0x05, m68k.MEM_SIZE_8, self._read_cr, self._write_cr),
-            ('VR', 0x06, m68k.MEM_SIZE_8, self._read_vr, self._write_vr),
+            ('SR', 0x01, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_sr),
+            ('DR', 0x03, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_dr),
+            ('CR', 0x05, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_cr),
+            ('VR', 0x06, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_vr),
+
+            ('DR', 0x03, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_dr),
+            ('CR', 0x05, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_cr),
+            ('VR', 0x06, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_vr),
         ])
         self.reset()
         self._unit = UART._unit
@@ -104,8 +108,11 @@ class Timer(Device):
                                     **options)
 
         self.add_registers([
-            ('COUNT',   0x00, m68k.MEM_SIZE_32, self._read_timebase, self._write_countdown),
-            ('VECTOR',  0x05, m68k.MEM_SIZE_8,  self._read_vector,  self._write_vector),
+            ('COUNT',   0x00, m68k.MEM_SIZE_32, m68k.MEM_READ,  self._read_timebase),
+            ('VECTOR',  0x05, m68k.MEM_SIZE_8,  m68k.MEM_READ,  self._read_vector),
+
+            ('COUNT',   0x00, m68k.MEM_SIZE_32, m68k.MEM_WRITE, self._write_countdown),
+            ('VECTOR',  0x05, m68k.MEM_SIZE_8,  m68k.MEM_WRITE, self._write_vector),
         ])
         self._scaler = int(self.cycle_rate / 1000000)  # 1MHz base clock
         self.reset()

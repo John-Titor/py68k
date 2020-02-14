@@ -15,6 +15,7 @@ Things to investigate / fix:
   ✔ suppress read traces for instruction fetches @done (20-02-02 18:24)
   ✔ newlib sbrk is busted; make stack bigger (room for stack + heap) & grow up from _end @done (20-02-08 23:32)
   ☐ exceptions in callbacks seem to trash the emulator state; probably better to hard-abort out of them
+  ☐ decide between public attributes and property methods. Device._name, size, address - anything not computed.
   
 Features:
   ✔ need new memory model, support multiple disjoint memories (RAM, ROM), > 16MiB @done (20-01-28 15:54)
@@ -31,6 +32,20 @@ Features:
   ✘ inject arbitrary RAM contents @cancelled (20-01-31 09:34)
   ✔ factor ROM loading into emu.add_memory rather than duplicating in the target @done (20-02-08 09:35)
 
+Tracing:
+  ☐ device read/write
+  ☐ memory read/write
+  ☐ register mapping
+  ☐ memory mapping
+  ☐ instruction execution
+  ☐ exceptions
+  ☐ jumps
+  ☐ ipl set
+  ☐ interrupt acknowledge
+  ☐ spurious interrupt
+  ☐ quantum start / end
+  ☐ emulator, device debug message
+  ☐ 
 Devices:
   ☐ root_device should signal bus error on failed register decode
   ✔ always call device.tick after handling register access @done (20-02-04 22:48)
@@ -45,11 +60,10 @@ Devices:
   ✔ tick -> callback_at / callback_after @done (20-02-08 23:34)
     ✔ identify callbacks with dev/'name' tuple, attrs when and who-to-call @done (20-02-08 23:34)
     ☐ migrate existing tick logic to callbacks @high
-  ☐ hash register/size/direction to handler rather than just address to read/write handlers
-    would support 'fallback' handlers
-    allows read/write ops to have different register names
+  ✔ hash register/size/direction to handler rather than just address to read/write handlers @done (20-02-13 22:33)
+  ☐ support 'fallback' handlers (16-bit access to 8 or 32-bit registers, etc.)
   ☐ --trace-io is global, would be nice to have per-dev tracing effective here
-  ☐ Device.__trace/__diagnostic is a mess, rethink
+  ☐ Device.__trace/__diagnostic is a mess, rethink -> use logging framework?
   68681:
    ✔ don't assume 'off-by-one' mapping, configure for low-byte, high-byte and packed @done (20-02-08 09:18)
    ☐ implement echo & loopback modes @low

@@ -102,8 +102,6 @@ class Emulator(object):
             self.trace_enable('instructions')
         if args.trace_jumps or args.trace_everything:
             self.trace_enable('jumps')
-        if args.trace_exceptions or args.trace_everything:
-            self.trace_enable('exceptions')
 
         if args.cycle_limit > 0:
             self._cycle_limit = args.cycle_limit
@@ -144,16 +142,13 @@ class Emulator(object):
                             help='enable all tracing options')
         parser.add_argument('--trace-memory',
                             action='store_true',
-                            help='enable memory tracing at startup')
+                            help='enable memory tracing')
         parser.add_argument('--trace-instructions',
                             action='store_true',
-                            help='enable instruction tracing at startup (implies --trace-jumps)')
+                            help='enable instruction tracing')
         parser.add_argument('--trace-jumps',
                             action='store_true',
-                            help='enable branch tracing at startup')
-        parser.add_argument('--trace-exceptions',
-                            action='store_true',
-                            help='enable tracing all exceptions at startup')
+                            help='enable branch tracing')
         parser.add_argument('--symbols',
                             type=str,
                             action='append',
@@ -212,8 +207,6 @@ class Emulator(object):
                 self.fatal('cycle limit exceeded')
 
             if (self._device_callback_at > 0) and (self._elapsed_cycles >= self._device_callback_at):
-                self.trace('CALLBACK', 
-                           info=f'invoking device callback {self._elapsed_cycles - self._device_callback_at} cycles late.')
                 self._device_callback_at = 0
                 self._device_callback_fn()
 
@@ -228,7 +221,6 @@ class Emulator(object):
             pass
 
     def set_device_callback(self, device_callback_at, device_callback_fn):
-        self.trace('CB', info=f'deadline {device_callback_at} now {self.current_cycle}')
         if device_callback_at <= self.current_cycle:
             raise RuntimeError(f'device attempted to set callback in the past')
 

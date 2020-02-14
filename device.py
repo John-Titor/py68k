@@ -2,11 +2,122 @@ import sys
 from musashi import m68k
 
 
+class Register:
+    __registers = dict()
+    __trace_io = False
+    __emu = None
+
+    def __init__(self, dev, name, offset, size, access, handler):
+        self.dev = dev
+        self.name = name
+        self.address = dev.address + offset
+        self.size = size
+        self.access = access
+        self._handler = handler
+
+        # validate alignment
+        if size == m68k.MEM_SIZE_8:
+            pass
+        elif (size == m68k.MEM_SIZE_16):
+            if (self.address & 1) != 0:
+                raise RuntimeError(f'{self} not 2-aligned')
+        elif (size == m68k.MEM_SIZE_32):
+            if (self.address & 3) != 0:
+                raise RuntimeError(f'{self} not 4-aligned')
+
+        if size not in [m68k.MEM_SIZE_8, m68k.MEM_SIZE_16, m68k.MEM_SIZE_32]:
+            raise RuntimeError(f'{self} has unrecogized size')
+        if access not in [m68k.MEM_READ, m68k.MEM_WRITE]:
+            raise RuntimeError(f'{self} has unrecognized access')
+
+        # validate uniqueness
+        try:
+            conflicting_reg = Register.lookup(address=self.address, size=self.size, access=self.access)
+            raise RuntimeError(f'register {self} conflicts with {repr(conflicting_reg)}')
+        except KeyError:
+            pass
+
+        # save for use later
+        Register.__registers[self.key] = self
+
+    @classmethod
+    def init(cls, args, emu):
+        Register.__trace_io = args.trace_io or args.trace_everything
+        Register.__emu = emu
+
+    @classmethod
+    def add_arguments(cls, parser):
+        parser.add_argument('--trace-io',
+                            action='store_true',
+                            help='enable tracing of I/O space accesses')
+
+    def _access(self, value=None):
+        """
+        handle an access to the register
+        """
+        if self.access == m68k.MEM_READ:
+            value = self._handler()
+            self.trace(value)
+            return value
+        elif self.access == m68k.MEM_WRITE:
+            if value is None:
+                raise RuntimeError(f'cannot write {self} without value')
+            self.trace(value)
+            self._handler(value)
+            return 0
+        else:
+            raise RuntimeError(f'{self} not accessible')
+
+    def __repr__(self):
+        if self.access == m68k.MEM_READ:
+            direction = 'R'
+        elif self.access == m68k.MEM_WRITE:
+            direction = 'W'
+        return f'{self.dev._name}.{self.name}'
+        # return f'{direction}:{self.dev._name}.{self.name}@{self.address:#x}/{self.size}'
+
+    def trace(self, value):
+        if Register.__trace_io or self.dev._debug:
+            if self.access == m68k.MEM_READ:
+                arrow = '->'
+                action = 'DEV_READ'
+            else:
+                arrow = '<-'
+                action = 'DEV_WRITE'
+
+            if self.size == m68k.MEM_SIZE_8:
+                xfer = f'{arrow} {value:#02x}'
+            elif self.size == m68k.MEM_SIZE_16:
+                xfer = f'{arrow} {value:#04x}'
+            else:
+                xfer = f'{arrow} {value:#08x}'
+
+            Register.__emu.trace(action=action, address=self.address, info=f'{self} {xfer}')
+
+    @property
+    def key(self):
+        return (self.address, self.size, self.access)
+
+    @classmethod
+    def lookup(cls, address, size, access):
+        return Register.__registers[(address, size, access)]
+
+    @classmethod
+    def access(cls, address, size, access, value=None):
+        # XXX we could be smarter here and handle e.g. 16-bit access
+        #     on top of an 8-bit or 32-bit register, etc.
+        return Register.lookup(address, size, access)._access(value)
+
+    @classmethod
+    def dump_registers(cls):
+        for reg in Register.__registers.values():
+            print(f'{repr(reg)}')
+
+
 class Device(object):
     """
     Generic device model.
     """
-    __register_map = dict()
     __devices = list()
     __callbacks = dict()
 
@@ -43,9 +154,7 @@ class Device(object):
                             metavar='DEVICE-NAME',
                             help='enable debugging for DEVICE-NAME, \'Device\''
                             ' to trace device framework.')
-        parser.add_argument('--trace-io',
-                            action='store_true',
-                            help='enable tracing of I/O space accesses')
+        Register.add_arguments(parser)
 
     ########################################
     # Devices
@@ -57,9 +166,10 @@ class Device(object):
             # one-time init
             m68k.set_int_ack_callback(Device.cb_int)
             m68k.mem_set_device_handler(Device.cb_access)
-            Device.__trace_io = args.trace_io or args.trace_everything
             Device.__debug = 'device' in args.debug_device
             Device.__emu = options['emulator']
+            Register.init(args, Device.__emu)
+
             Device.__root_device = dev(args=args, **options)
             Device.__root_device.add_system_devices(args)
         else:
@@ -77,115 +187,40 @@ class Device(object):
     ########################################
     # Registers
 
-    def add_register(self, name, offset, size, read=None, write=None):
+    def add_register(self, name, offset, size, access, handler):
         """
         add a register to be handled by the device
         """
-        register_address = self._address + offset
-        if size == m68k.MEM_SIZE_8:
-            pass
-        elif (size == m68k.MEM_SIZE_16):
-            if (register_address & 1) != 0:
-                raise RuntimeError(f'register {name} size 16 at {register_address:#x} not 2-aligned')
-        elif (size == m68k.MEM_SIZE_32):
-            if (register_address & 3) != 0:
-                raise RuntimeError(f'register {name} size 32 at {register_address:#x} not 4-aligned')
-        self.__class__.__register_map[register_address] = {
-            'device': self,
-            'name': name,
-            'size': size,
-            'read': read,
-            'write': write,
-        }
+        reg = Register(self, name, offset, size, access, handler)
         implied_size = int(offset + (size / 8))
         if implied_size > self._size:
             self._size = implied_size
         if self._debug or self.__class__.__debug:
-            Device.__emu.trace('MAP_REG',
-                               address=register_address,
-                               info=f'{self._name}:{name} @ {register_address:#x}/{size}')
+            Device.__emu.trace('MAP_REG', address=reg.address, info=f'{repr(reg)}')
 
     def add_registers(self, registers):
         """
         add registers in bulk
         """
-        for name, offset, size, read, write in registers:
-            self.add_register(name, offset, size, read, write)
-
-    @classmethod
-    def register_info(cls, address):
-        """
-        get the info dictionary for the register at address
-        """
-        return Device.__register_map[address]
-
-    @classmethod
-    def register_name(cls, address):
-        """
-        get the pretty name for the register at address
-        """
-        try:
-            reg_info = Device.register_info(address)
-            dev_name = reg_info['device']._name
-            name = f'{dev_name}.{reg_info["name"]}@{address:#x}/{reg_info["size"]}'
-        except KeyError:
-            name = f'???@{address:#x}'
-
-        return name
+        for name, offset, size, access, handler in registers:
+            self.add_register(name, offset, size, access, handler)
 
     @classmethod
     def cb_access(cls, operation, address, size, value):
         try:
-            # look for a device
-            try:
-                reg_info = Device.register_info(address)
-            except KeyError:
-                Device.__trace('DECODE', f'no device handling {address:#x}/{size}')
-                # XXX bus error?
-                return 0
-
-            if operation == m68k.MEM_READ:
-                handler_key = 'read'
-            elif operation == m68k.MEM_WRITE:
-                handler_key = 'write'
-            else:
-                raise RuntimeError(f'unexpected device access {operation}')
-
-            handler = reg_info[handler_key]
-            if handler is None:
-                Device.__trace('DECODE', f'no handler {handler_key} for {Device.register_name(address)}')
-                # XXX bus error?
-
-            offset = address - reg_info['device']._address
-
-            if operation == m68k.MEM_READ:
-                value = handler()
-                if Device.__trace_io:
-                    label = f'{Device.register_name(address)}'
-                    if size == m68k.MEM_SIZE_8:
-                        str = f'{label} -> {value:#02x}'
-                    elif size == m68k.MEM_SIZE_16:
-                        str = f'{label} -> {value:#04x}'
-                    else:
-                        str = f'{label} -> {value:#08x}'
-                    Device.__emu.trace('DEV_READ', address=address, info=str)
-
-            elif operation == m68k.MEM_WRITE:
-                if Device.__trace_io:
-                    label = f'{Device.register_name(address)}'
-                    if size == m68k.MEM_SIZE_8:
-                        str = f'{label} <- {value:#02x}'
-                    elif size == m68k.MEM_SIZE_16:
-                        str = f'{label} <- {value:#04x}'
-                    else:
-                        str = f'{label} <- {value:#08x}'
-                    Device.__emu.trace('DEV_WRITE', address=address, info=str)
-                handler(value)
-
-        except Exception as e:
-            Device.__emu.fatal_exception(sys.exc_info())
+            value = Register.access(address, size, operation, value)
+        except KeyError:
+            # XXX bus error?
+            Device.__trace('DECODE', f'no register to handle {operation}:{address:#x}/{size}')
 
         return value
+
+    @classmethod
+    def device_for_address(cls, address):
+        for dev in Device.__devices:
+            if (address >= dev.address) and (address < (dev.address + dev.size)):
+                return dev
+        return None
 
     ########################################
     # Logging
@@ -253,7 +288,6 @@ class Device(object):
         """
         Arrange to be called back at the earliest future deadline.
         """
-        Device.__trace(info=f'consider callbacks {Device.__callbacks}')
         earliest = sys.maxsize
         earliest_handle = None
         for ident, info in Device.__callbacks.items():
@@ -262,7 +296,6 @@ class Device(object):
                 earliest = cycle
                 _, earliest_handle = ident
         if earliest < sys.maxsize:
-            Device.__trace(info=f'next callback \'{earliest_handle}\' at {earliest}')
             Device.__emu.set_device_callback(earliest, Device.__callback)
 
     @classmethod
@@ -277,8 +310,6 @@ class Device(object):
                 _, handle = ident
                 func = info['func']
                 Device.__callbacks.pop(ident, False)
-                Device.__trace(info=f'callback \'{handle}\' ({func})')
-                Device.__trace(info=f'_callbacks {Device.__callbacks}')
                 func()
         Device.__set_callback()
 
