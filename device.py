@@ -23,19 +23,18 @@ class Device(object):
     __console_input_handler = None
 
     def __init__(self, args, name, required_options=None, **options):
-        self._name = name
+        self.name = name
 
         if required_options is not None:
             for optname in required_options:
                 if optname not in options:
-                    raise RuntimeError(f'{self._name} missing required option {optname}')
+                    raise RuntimeError(f'{self.name} missing required option {optname}')
 
         # handle some common options
-        self._address = options['address'] if 'address' in options else None
-        self._interrupt = options['interrupt'] if 'interrupt' in options else None
-
-        self._size = 0
-        self._debug = self._name in args.debug_device
+        self.address = options['address'] if 'address' in options else None
+        self.interrupt = options['interrupt'] if 'interrupt' in options else None
+        self.size = None
+        self.debug = self.name in args.debug_device
         self._asserted_ipl = 0
 
     @classmethod
@@ -57,8 +56,8 @@ class Device(object):
 
         if Device.__root_device is None:
             # one-time init
-            m68k.set_int_ack_callback(Device.cb_int)
-            m68k.mem_set_device_handler(Device.cb_access)
+            m68k.set_int_ack_callback(Device.__cb_int)
+            m68k.mem_set_device_handler(Device.__cb_access)
             Device.__debug = 'device' in args.debug_device
             Device.__emu = options['emulator']
             Register.init(args, Device.__emu)
@@ -86,9 +85,12 @@ class Device(object):
         """
         reg = Register(self, name, offset, size, access, handler)
         implied_size = int(offset + (size / 8))
-        if implied_size > self._size:
-            self._size = implied_size
-        if self._debug or self.__class__.__debug:
+        if self.size is None:
+            self.size = implied_size
+        elif implied_size > self.size:
+            self.size = implied_size
+
+        if self.debug or self.__class__.__debug:
             Device.__emu.trace('MAP_REG', address=reg.address, info=f'{repr(reg)}')
 
     def add_registers(self, registers):
@@ -99,7 +101,7 @@ class Device(object):
             self.add_register(name, offset, size, access, handler)
 
     @classmethod
-    def cb_access(cls, operation, address, size, value):
+    def __cb_access(cls, operation, address, size, value):
         try:
             value = Register.access(address, size, operation, value)
         except KeyError:
@@ -108,13 +110,6 @@ class Device(object):
 
         return value
 
-    @classmethod
-    def device_for_address(cls, address):
-        for dev in Device.__devices:
-            if (address >= dev.address) and (address < (dev.address + dev.size)):
-                return dev
-        return None
-
     ########################################
     # Logging
 
@@ -122,11 +117,11 @@ class Device(object):
         """
         Emit a debug trace message
         """
-        if self._debug:
-            Device.__emu.trace(self._name, address=address, info=info)
+        if self.debug:
+            Device.__emu.trace(self.name, address=address, info=info)
 
     def diagnostic(self, address=None, info=''):
-        Device.__emu.trace(f'{self._name}!!', info=info)
+        Device.__emu.trace(f'{self.name}!!', info=info)
 
     @classmethod
     def __trace(cls, address=None, info=''):
@@ -146,7 +141,7 @@ class Device(object):
         """
         cb_at = int(cb_at)
         if cb_at <= self.current_cycle:
-            raise RuntimeError(f'{self._name} attempt to register callback in the past')
+            raise RuntimeError(f'{self.name} attempt to register callback in the past')
         else:
             self.trace(info=f'set callback \'{cb_name}\' at {cb_at}')
         self.__add_callback(self, cb_at, cb_name, cb_func)
@@ -211,9 +206,9 @@ class Device(object):
 
     def assert_ipl(self, ipl=None):
         if ipl is None:
-            if self._interrupt is None:
-                raise RuntimeError(f'{self._name} was not assigned an interrupt')
-            ipl = self._interrupt
+            if self.interrupt is None:
+                raise RuntimeError(f'{self.name} was not assigned an interrupt')
+            ipl = self.interrupt
         self._asserted_ipl = ipl
         self.trace(info=f'asserted IPL {ipl}')
         self.__set_ipl()
@@ -242,13 +237,13 @@ class Device(object):
                 # an unmasked interrupt we need to end the timeslice to get its
                 # attention
                 m68k.end_timeslice()
-                Device.__trace(info=f'un-masked IPL {ipl} from {asserting_dev._name}')
+                Device.__trace(info=f'un-masked IPL {ipl} from {asserting_dev.name}')
             else:
-                Device.__trace(info=f'masked IPL {ipl} from {asserting_dev._name}')
+                Device.__trace(info=f'masked IPL {ipl} from {asserting_dev.name}')
         m68k.set_irq(ipl)
 
     @classmethod
-    def cb_int(cls, interrupt):
+    def __cb_int(cls, interrupt):
         """
         run an interrupt-acknowledge cycle for the given interrupt
         """
@@ -320,14 +315,6 @@ class Device(object):
 
     ########################################
     # Properties
-
-    @property
-    def address(self):
-        return self._address
-
-    @property
-    def size(self):
-        return self._size
 
     @property
     def emu(self):

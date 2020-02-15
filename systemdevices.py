@@ -15,7 +15,6 @@ class RootDevice(Device):
 
     def __init__(self, args, **options):
         super().__init__(args=args, name='root')
-        self._debug = 'device' in args.debug_device
         self.emu.add_reset_hook(self.reset)
 
     def add_system_devices(self, args):
@@ -37,7 +36,7 @@ class RootDevice(Device):
 
 class SocketConsole(Device):
     def __init__(self, args, **options):
-        super().__init__(args=args, name='sockcons')
+        super().__init__(args=args, name='console')
 
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:

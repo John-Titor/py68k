@@ -77,8 +77,8 @@ class Register:
             direction = 'R'
         elif self.access == m68k.MEM_WRITE:
             direction = 'W'
-        return f'{self.dev._name}.{self.name}'
-        # return f'{direction}:{self.dev._name}.{self.name}@{self.address:#x}/{self.size}'
+        return f'{self.dev.name}.{self.name}'
+        # return f'{direction}:{self.dev.name}.{self.name}@{self.address:#x}/{self.size}'
 
     def trace(self, value):
         if Register.__trace_io or self.dev._debug:
