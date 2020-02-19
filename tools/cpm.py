@@ -3,7 +3,9 @@
 # CP/M 68K executable format tools
 #
 
-import struct, sys, os
+import struct
+import sys
+import os
 from hexdump import hexdump
 
 # object file types
