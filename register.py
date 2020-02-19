@@ -3,15 +3,18 @@
 #
 
 import sys
+
 from musashi import m68k
+from trace import Trace
 
 
 class Register:
     __registers = dict()
-    __trace_io = False
-    __emu = None
+    __trace = None
 
     def __init__(self, dev, name, offset, size, access, handler):
+        if Register.__trace is None:
+            raise RuntimeError('cannot define register without trace')
         self.dev = dev
         self.name = name
         self.address = dev.address + offset
@@ -37,7 +40,7 @@ class Register:
         # validate uniqueness
         try:
             conflicting_reg = Register.lookup(address=self.address, size=self.size, access=self.access)
-            raise RuntimeError(f'register {self} conflicts with {repr(conflicting_reg)}')
+            raise RuntimeError(f'register {self} conflicts with {conflicting_reg}')
         except KeyError:
             pass
 
@@ -45,15 +48,15 @@ class Register:
         Register.__registers[self.key] = self
 
     @classmethod
-    def init(cls, args, emu):
+    def init(cls, args):
+        Register.__trace = Trace.get_tracer()
         Register.__trace_io = args.trace_io or args.trace_everything
-        Register.__emu = emu
 
     @classmethod
     def add_arguments(cls, parser):
         parser.add_argument('--trace-io',
                             action='store_true',
-                            help='enable tracing of I/O space accesses')
+                            help='enable tracing of all device register accesses')
 
     def _access(self, value=None):
         """
@@ -61,12 +64,12 @@ class Register:
         """
         if self.access == m68k.MEM_READ:
             value = self._handler()
-            self.trace(value)
+            self.trace_io(value)
             return value
         elif self.access == m68k.MEM_WRITE:
             if value is None:
                 raise RuntimeError(f'cannot write {self} without value')
-            self.trace(value)
+            self.trace_io(value)
             self._handler(value)
             return 0
         else:
@@ -80,8 +83,8 @@ class Register:
         return f'{self.dev.name}.{self.name}'
         # return f'{direction}:{self.dev.name}.{self.name}@{self.address:#x}/{self.size}'
 
-    def trace(self, value):
-        if Register.__trace_io or self.dev._debug:
+    def trace_io(self, value):
+        if Register.__trace_io or self.dev.debug:
             if self.access == m68k.MEM_READ:
                 arrow = '->'
                 action = 'DEV_READ'
@@ -96,7 +99,7 @@ class Register:
             else:
                 xfer = f'{arrow} {value:#08x}'
 
-            Register.__emu.trace(action=action, address=self.address, info=f'{self} {xfer}')
+            Register.__trace.trace(action=action, address=self.address, info=f'{self} {xfer}')
 
     @property
     def key(self):
@@ -115,4 +118,4 @@ class Register:
     @classmethod
     def dump_registers(cls):
         for reg in Register.__registers.values():
-            print(f'{repr(reg)}')
+            print(f'{reg}')

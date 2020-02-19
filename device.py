@@ -3,8 +3,10 @@
 #
 
 import sys
+
 from musashi import m68k
 from register import Register
+from trace import Trace
 
 
 class Device(object):
@@ -17,13 +19,15 @@ class Device(object):
     __emu = None
     __root_device = None
     __debug = False
-    __trace_io = False
+    __trace = None
 
     __console_output_handler = None
     __console_input_handler = None
 
     def __init__(self, args, name, required_options=None, **options):
         self.name = name
+        if Device.__trace is None:
+            Device.__trace = Trace.get_tracer()
 
         if required_options is not None:
             for optname in required_options:
@@ -56,11 +60,11 @@ class Device(object):
 
         if Device.__root_device is None:
             # one-time init
+            Register.init(args)
             m68k.set_int_ack_callback(Device.__cb_int)
             m68k.mem_set_device_handler(Device.__cb_access)
-            Device.__debug = 'device' in args.debug_device
+            Device.__debug = 'Device' in args.debug_device
             Device.__emu = options['emulator']
-            Register.init(args, Device.__emu)
 
             Device.__root_device = dev(args=args, **options)
             Device.__root_device.add_system_devices(args)
@@ -91,7 +95,7 @@ class Device(object):
             self.size = implied_size
 
         if self.debug or self.__class__.__debug:
-            Device.__emu.trace('MAP_REG', address=reg.address, info=f'{repr(reg)}')
+            Device.trace(action='MAP_REG', address=reg.address, info=f'{reg}')
 
     def add_registers(self, registers):
         """
@@ -106,31 +110,9 @@ class Device(object):
             value = Register.access(address, size, operation, value)
         except KeyError:
             # XXX bus error?
-            Device.__trace('DECODE', f'no register to handle {operation}:{address:#x}/{size}')
+            Device.trace('DECODE', f'no register to handle {operation}:{address:#x}/{size}')
 
         return value
-
-    ########################################
-    # Logging
-
-    def trace(self, address=None, info=''):
-        """
-        Emit a debug trace message
-        """
-        if self.debug:
-            Device.__emu.trace(self.name, address=address, info=info)
-
-    def diagnostic(self, address=None, info=''):
-        Device.__emu.trace(f'{self.name}!!', info=info)
-
-    @classmethod
-    def __trace(cls, address=None, info=''):
-        if Device.__debug:
-            Device.__emu.trace('device', address=address, info=info)
-
-    @classmethod
-    def __diagnostic(cls, address=None, info=''):
-        Device.__emu.trace('device!!', address=address, info=info)
 
     ########################################
     # Device callbacks
@@ -237,9 +219,9 @@ class Device(object):
                 # an unmasked interrupt we need to end the timeslice to get its
                 # attention
                 m68k.end_timeslice()
-                Device.__trace(info=f'un-masked IPL {ipl} from {asserting_dev.name}')
+                Device.trace(info=f'un-masked IPL {ipl} from {asserting_dev.name}')
             else:
-                Device.__trace(info=f'masked IPL {ipl} from {asserting_dev.name}')
+                Device.trace(info=f'masked IPL {ipl} from {asserting_dev.name}')
         m68k.set_irq(ipl)
 
     @classmethod
@@ -251,9 +233,9 @@ class Device(object):
             if dev._asserted_ipl == interrupt:
                 vector = dev.get_vector(interrupt)
                 if vector != m68k.IRQ_SPURIOUS:
-                    Device.__trace(info=f'INTERRUPT, vector {vector}')
+                    Device.trace(info=f'INTERRUPT, vector {vector}')
                     return vector
-        Device.__trace(info='SPURIOUS_INTERRUPT')
+        Device.trace(info='SPURIOUS_INTERRUPT')
         return m68k.IRQ_SPURIOUS
 
     ########################################
@@ -327,6 +309,18 @@ class Device(object):
     @property
     def devices(self):
         return self.__class__.__devices
+
+    ########################################
+    # Tracing
+
+    def trace(self, address=None, info=''):
+        if self.debug:
+            Device.__trace.trace(action=self.name, address=address, info=info)
+
+    @classmethod
+    def trace(cls, action='', address=None, info=''):
+        if cls.__debug:
+            cls.__trace.trace(action=action, address=address, info=info)
 
     ########################################
     # Subclass protocol

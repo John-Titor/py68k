@@ -2,14 +2,14 @@
 # Console server application - listens on port 6809 and emulates a VT102
 #
 
-import sys
-import os
 import curses
-import vt102
-import socket
+import os
 import selectors
 import signal
+import socket
+import sys
 import time
+import vt102
 
 
 class ConsoleServer():
@@ -114,12 +114,9 @@ class ConsoleServer():
         return str
 
     def _handle_input(self, input):
-        # self.trace('in ' + self._fmt(input))
         self._buffered_input += chr(input)
 
     def _handle_output(self, output):
-        # self.trace('out ' + self._fmt(output))
-
         # vt102 is only 7-bit clean
         output &= 0x7f
         self._buffered_output += chr(output)
@@ -144,8 +141,6 @@ class ConsoleServer():
         input = self._win.getch()
         if input != -1:
             if input in ConsoleServer.input_keymap:
-                # self.trace('translate {} -> {}'.format(input,
-                #                                        ConsoleServer.input_keymap[input]))
                 for c in ConsoleServer.input_keymap[input]:
                     self._handle_input(ord(c))
             else:

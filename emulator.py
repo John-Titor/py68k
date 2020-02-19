@@ -2,15 +2,16 @@
 # Core emulator logic
 #
 
-import time
-import sys
 import signal
+import sys
+import time
 import traceback
 
-from imageELF import ELFImage
 from device import Device
-from systemdevices import RootDevice
+from imageELF import ELFImage
 from musashi import m68k
+from systemdevices import RootDevice
+from trace import Trace
 
 
 class Emulator(object):
@@ -52,29 +53,13 @@ class Emulator(object):
         'SCC68070': m68k.CPU_TYPE_SCC68070,
     }
 
-    operation_map = {
-        m68k.MEM_READ: 'READ',
-        m68k.MEM_WRITE: 'WRITE',
-        m68k.INVALID_READ: 'BAD_READ',
-        m68k.INVALID_WRITE: 'BAD_WRITE',
-        m68k.MEM_MAP: 'MAP'
-    }
-
     def __init__(self, args, cpu="68000", frequency=8000000):
 
         self._dead = False
         self._exception_info = None
         self._postmortem = None
 
-        # initialise tracing
-        self._trace_file = open(args.trace_file, "w", 1)
-        self._trace_memory = False
-        self._trace_instructions = False
-        self._trace_jumps = False
-
-        # files and symbolication
-        self._load_image = None
-        self._symbol_files = list()
+        self._trace = Trace(args, emulator=self)
 
         # time
         self._cpu_frequency = frequency
@@ -83,9 +68,6 @@ class Emulator(object):
         self._default_quantum = int(self._cpu_frequency / 1000)  # ~1ms in cycles
         self._device_callback_at = 0
         self._device_callback_fn = None
-
-        # reset callbacks
-        self._reset_hooks = list()
 
         # intialise the CPU
         try:
@@ -97,16 +79,18 @@ class Emulator(object):
 
         # attach unconditional callback functions
         m68k.set_reset_instr_callback(self.cb_reset)
+        self._reset_hooks = list()
         m68k.set_illg_instr_callback(self.cb_illg)
 
-        # set tracing options
-        if args.trace_memory or args.trace_everything:
-            self.trace_enable('memory')
-        if args.trace_instructions or args.trace_everything:
-            self.trace_enable('instructions')
-        if args.trace_jumps or args.trace_everything:
-            self.trace_enable('jumps')
+        # load an executable?
+        if args.load is not None:
+            self._load_image = ELFImage(args.load)
+            self._load_address = args.load_address
+            self._trace.add_symbol_image(self._load_image)
+        else:
+            self._load_image = None
 
+        # decide how long to run for
         if args.cycle_limit > 0:
             self._cycle_limit = args.cycle_limit
         else:
@@ -115,49 +99,17 @@ class Emulator(object):
         if not args.disable_bus_error:
             m68k.mem_enable_bus_error(True)
 
-        # load an executable?
-        if args.load is not None:
-            self._load_image = ELFImage(args.load)
-            self._symbol_files.append(self._load_image)
-            self._load_address = args.load_address
-
-        # add symbol files
-        if args.symbols is not None:
-            for symfile in args.symbols:
-                self._symbol_files.append(ELFImage(symfile, symbols_only=True))
-
         # wire up the root device
         self.add_device(args, RootDevice, emulator=self)
 
     @classmethod
     def add_arguments(cls, parser, default_load_address=0x400):
 
-        parser.add_argument('--trace-file',
-                            type=str,
-                            default='trace.out',
-                            help='file to which trace output will be written')
         parser.add_argument('--cycle-limit',
                             type=int,
                             default=float('inf'),
                             metavar='CYCLES',
                             help='stop the emulation after CYCLES machine cycles')
-        parser.add_argument('--trace-everything',
-                            action='store_true',
-                            help='enable all tracing options')
-        parser.add_argument('--trace-memory',
-                            action='store_true',
-                            help='enable memory tracing')
-        parser.add_argument('--trace-instructions',
-                            action='store_true',
-                            help='enable instruction tracing')
-        parser.add_argument('--trace-jumps',
-                            action='store_true',
-                            help='enable branch tracing')
-        parser.add_argument('--symbols',
-                            type=str,
-                            action='append',
-                            metavar='ELF-SYMFILE',
-                            help='add ELF objects containing symbols for symbolicating trace')
         parser.add_argument('--load',
                             type=str,
                             metavar='ELF-PROGRAM',
@@ -202,9 +154,9 @@ class Emulator(object):
                 if (self._elapsed_cycles + quantum) > self._device_callback_at:
                     quantum = self._device_callback_at - self._elapsed_cycles
 
-            self.trace('RUN', info=f'quantum {quantum} cycles @ {self._elapsed_cycles}')
+            self.trace(action='RUN', info=f'quantum {quantum} cycles @ {self._elapsed_cycles}')
             run_count = m68k.execute(quantum)
-            self.trace('STOP', info=f'ran for {run_count} cycles')
+            self.trace(action='STOP', info=f'ran for {run_count} cycles')
             self._elapsed_cycles += run_count
 
             if self._elapsed_cycles > self._cycle_limit:
@@ -216,13 +168,9 @@ class Emulator(object):
 
     def finish(self):
         elapsed_time = time.time() - self._start_time
-        self.trace('END',
+        self.trace(action='END',
                    info=f'{self.current_cycle} cycles in {elapsed_time} seconds, {int(self.current_cycle / elapsed_time)} cps')
-        try:
-            self._trace_file.flush()
-            self._trace_file.close()
-        except Exception:
-            pass
+        self._trace.close()
 
     def set_device_callback(self, device_callback_at, device_callback_fn):
         if device_callback_at <= self.current_cycle:
@@ -278,107 +226,6 @@ class Emulator(object):
     def cycle_rate(self):
         return self._cpu_frequency
 
-    def trace_enable(self, what, option=None):
-        """
-        Adjust tracing options
-        """
-        if what == 'memory':
-            self._trace_memory = True
-            m68k.mem_set_trace_handler(self.cb_trace_memory)
-            m68k.mem_enable_tracing(True)
-
-        elif what == 'instructions':
-            self._trace_instructions = True
-            m68k.set_instr_hook_callback(self.cb_trace_instruction)
-            self.trace_enable('jumps')
-
-        elif what == 'jumps':
-            self._trace_jumps = True
-            m68k.set_pc_changed_callback(self.cb_trace_jump)
-
-        elif what == 'exceptions':
-            m68k.set_pc_changed_callback(self.cb_trace_jump)
-
-        else:
-            raise RuntimeError('bad tracing option {}'.format(what))
-
-    def trace(self, action, address=None, info=''):
-        """
-        Cut a trace entry
-        """
-        if address is not None:
-            symname = self._sym_for_address(address)
-            if symname is not None:
-                afield = '{} / {:#08x}'.format(symname, address)
-            else:
-                afield = '{:#08x}'.format(address)
-        else:
-            afield = ''
-
-        msg = '{:>10}: {:>40} : {}'.format(action, afield, info.strip())
-
-        self._trace_file.write(msg + '\n')
-
-    def log(self, msg):
-        print(msg)
-        self._trace_file.write(msg + '\n')
-
-    def _sym_for_address(self, address):
-        for symfile in self._symbol_files:
-            name = symfile.get_symbol_name(address)
-            if name is not None:
-                return name
-        return None
-
-    def cb_trace_memory(self, operation, addr, size, value):
-        """
-        Cut a memory trace entry
-        """
-        try:
-            action = self.operation_map[operation]
-            if operation == m68k.MEM_MAP:
-                if value == m68k.MEM_MAP_RAM:
-                    info = f'RAM {size:#x}'
-                elif value == m68k.MEM_MAP_ROM:
-                    info = f'ROM {size:#x}'
-                elif value == m68k.MEM_MAP_DEVICE:
-                    info = f'DEVICE {size:#x}'
-                else:
-                    raise RuntimeError(f'unexpected mapping type {value}')
-            else:
-                if size == m68k.MEM_SIZE_8:
-                    info = f'{value:#04x}'
-                elif size == m68k.MEM_SIZE_16:
-                    info = f'{value:#06x}'
-                elif size == m68k.MEM_SIZE_32:
-                    info = f'{value:#010x}'
-                else:
-                    raise RuntimeError(f'unexpected trace size {size}')
-
-            self.trace(action, addr, info)
-
-        except Exception:
-            self.fatal_exception(sys.exc_info())
-
-        return 0
-
-    def cb_trace_instruction(self, pc):
-        """
-        Cut an instruction trace entry
-        """
-        try:
-            dis = m68k.disassemble(pc, self._cpu_type)
-            info = ''
-            for reg in self.registers:
-                if dis.find(reg) is not -1:
-                    info += ' {}={:#x}'.format(reg, m68k.get_reg(self.registers[reg]))
-
-            self.trace('EXECUTE', pc, '{:30} {}'.format(dis, info))
-            return
-
-        except Exception:
-            self.fatal_exception(sys.exc_info())
-
     def cb_reset(self):
         """
         Trace reset instructions
@@ -405,16 +252,6 @@ class Emulator(object):
 
         # instruction not handled by emulator, legitimately illegal
         return m68k.ILLG_ERROR
-
-    def cb_trace_jump(self, new_pc):
-        """
-        Cut a jump trace entry, called when the PC changes significantly, usually
-        a function call, return or exception
-        """
-        try:
-            self.trace('JUMP', address=new_pc)
-        except Exception:
-            self.fatal_exception(sys.exc_info())
 
     def _keyboard_interrupt(self, signal=None, frame=None):
         self.fatal('\rExit due to user interrupt.')
@@ -470,6 +307,9 @@ class Emulator(object):
                 return result
             result += chr(c)
             strptr += 1
+
+    def trace(self, action='', address=None, info=''):
+        self._trace.trace(action=action, address=address, info=info)
 
     def fatal_exception(self, exception_info):
         """

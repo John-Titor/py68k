@@ -1,6 +1,6 @@
-import sys
 import io
 import struct
+import sys
 
 from device import Device
 from musashi import m68k
@@ -248,16 +248,15 @@ class CompactFlash(Device):
         else:
             self._r_status = STATUS_ERR
             self._r_error = ERROR_ABORT
-            self._trace_io('IOERR', 'command {:02x} not supported'.format(value))
+            self.trace(info=f'ERROR: command {value:02x} not supported')
 
     def _trace_io(self, action):
-        self.trace(action, 'count {} LBA {}'.format(
-            self._r_sector_count, self._r_lba))
+        self.trace(info=f'{action} count {self._r_sector_count} LBA {self._r_lba}')
 
     def _do_io(self, mode):
         # if we're in the FAULT state (no file, eg.) all I/O fails
         if self._r_status & STATUS_DF:
-            self.trace('IOERR', 'no device')
+            self.trace(info=f'ERROR: no device')
             self._r_status |= STATUS_ERR
             self._r_error = ERROR_UNCORRECTABLE
             return
@@ -271,7 +270,7 @@ class CompactFlash(Device):
             self._bytes_remaining = 256 * SECTOR_SIZE
 
         if (file_byte_offset + self._bytes_remaining) > self._file_size:
-            self.trace('IOERR', 'access beyond end of device')
+            self.trace(info=f'ERROR: access beyond end of device')
             self._r_status |= STATUS_ERR
             self._r_error = ERROR_UNCORRECTABLE
 
@@ -291,7 +290,7 @@ class CompactFlash(Device):
         elif self._current_mode == AMODE_READ:
             pass
         else:
-            self.trace('IOERR', 'data read when not reading / identifying')
+            self.trace(info=f'ERROR: data read when not reading / identifying')
             return 0
 
         if width == m68k.MEM_SIZE_8:
@@ -299,7 +298,7 @@ class CompactFlash(Device):
         else:
             count = 2
         if self._bytes_remaining < count:
-            self.trace('IOERR', 'read beyond sector buffer')
+            self.trace(info=f'ERROR: read beyond sector buffer')
             return 0
 
         if self._current_mode == AMODE_READ:
@@ -327,7 +326,7 @@ class CompactFlash(Device):
 
     def _io_write(self, width, value):
         if self._current_mode != AMODE_WRITE:
-            self.trace('IOERR', 'data write when not writing')
+            self.trace(info=f'ERROR: data write when not writing')
             return 0
 
         data = bytearray()
@@ -336,7 +335,7 @@ class CompactFlash(Device):
             data.append(value >> 8)
 
         if self._bytes_remaining < len(data):
-            self.trace('IOERR', 'write beyond sector buffer')
+            self.trace(info=f'ERROR: write beyond sector buffer')
             return
 
         self._file_handle.write(data)

@@ -115,7 +115,7 @@ class Channel():
             isr |= self.INT_TXRDY
         if self._rxEnable:
             if len(self._rxfifo) > (1 if self._mr1 & self.MR1_FFULL_EN else 0):
-                isr |= self.INT_RXDRY_FFULL
+                isr |= self.INT_RXRDY_FFULL
         self._parent.update_channel_isr(self._port, isr)
 
     def _handle_console_input(self, input):

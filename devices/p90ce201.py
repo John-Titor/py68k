@@ -1,11 +1,8 @@
-import sys
-from device import Device
 from collections import deque
-from musashi.m68k import (
-    M68K_IRQ_SPURIOUS,
-    M68K_IRQ_AUTOVECTOR,
-    MEM_SIZE_8,
-)
+import sys
+
+from device import Device
+from musashi.m68k import m68k
 
 ADDR_P90Syscon = 0x80001000
 ADDR_P90ICU = 0x80001020

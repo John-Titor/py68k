@@ -2,13 +2,13 @@
 # Emulator-specific pseudo-devices
 #
 
-import sys
 import os
-import socket
 import selectors
+import socket
+import sys
 
-from musashi import m68k
 from device import Device
+from musashi import m68k
 
 
 class RootDevice(Device):

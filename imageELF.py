@@ -1,16 +1,16 @@
 #
 # ELF image loader
 #
-import os
-import subprocess
-import struct
 from bisect import bisect_left
+import os
+import struct
+import subprocess
 
 # note - package is 'pyelftools'
-from elftools.elf.elffile import ELFFile
-from elftools.elf.sections import SymbolTableSection
-from elftools.elf.relocation import RelocationSection
 from elftools.elf.constants import SH_FLAGS
+from elftools.elf.elffile import ELFFile
+from elftools.elf.relocation import RelocationSection
+from elftools.elf.sections import SymbolTableSection
 
 R_68K_32 = 0x01
 

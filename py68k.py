@@ -3,15 +3,16 @@
 # A M68K emulator for development purposes
 #
 
-import sys
 import argparse
 import importlib
 from pathlib import Path
+import sys
 
-from emulator import Emulator
-from device import Device
-from systemdevices import RootDevice
 from consoleserver import ConsoleServer
+from device import Device
+from emulator import Emulator
+from systemdevices import RootDevice
+from trace import Trace
 
 
 # Parse commandline arguments
@@ -55,6 +56,7 @@ if args.console_server:
 if args.target is not None:
     target = importlib.import_module('targets.' + args.target)
     Emulator.add_arguments(parser)
+    Trace.add_arguments(parser)
     Device.add_arguments(parser)
     RootDevice.add_arguments(parser)
     target.add_arguments(parser)

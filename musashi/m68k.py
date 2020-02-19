@@ -266,8 +266,11 @@ unsigned int m68k_disassemble_raw(char* str_buff, unsigned int pc, const unsigne
 lib.mem_add_memory.restype = c_bool
 lib.mem_add_device.restype = c_bool
 lib.mem_read_memory.restype = c_uint
+
 device_handler_func_type = CFUNCTYPE(c_uint, c_uint, c_uint, c_uint, c_uint)
 trace_handler_func_type = CFUNCTYPE(None, c_uint, c_uint, c_uint, c_uint)
+instr_handler_func_type = CFUNCTYPE(None, c_uint)
+jump_handler_func_type = CFUNCTYPE(None, c_uint)
 
 
 def mem_add_memory(base, size, writable=True):
@@ -293,8 +296,24 @@ def mem_set_trace_handler(func):
     lib.mem_set_trace_handler(trace_handler)
 
 
-def mem_enable_tracing(enable=True):
-    lib.mem_enable_tracing(c_bool(enable))
+def mem_set_instr_handler(func):
+    global instr_handler
+    instr_handler = instr_handler_func_type(func)
+    lib.mem_set_instr_handler(instr_handler)
+
+
+def mem_set_jump_handler(func):
+    global jump_handler
+    jump_handler = jump_handler_func_type(func)
+    lib.mem_set_jump_handler(jump_handler)
+
+
+def mem_enable_mem_tracing(enable=True):
+    lib.mem_enable_mem_tracing(c_bool(enable))
+
+
+def mem_enable_instr_tracing(enable=True):
+    lib.mem_enable_instr_tracing(c_bool(enable))
 
 
 def mem_enable_bus_error(enable=True):

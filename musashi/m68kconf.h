@@ -154,15 +154,15 @@
  * large value.  This allows host programs to be nicer when it comes to
  * fetching immediate data and instructions on a banked memory system.
  */
-#define M68K_MONITOR_PC             OPT_SPECIFY_HANDLER
-#define M68K_SET_PC_CALLBACK(A)     {extern void pc_changed_callback(unsigned int); pc_changed_callback(A);}
+#define M68K_MONITOR_PC             OPT_OFF
+#define M68K_SET_PC_CALLBACK(A)     your_set_pc_function()
 
 
 /* If ON, CPU will call the instruction hook callback before every
  * instruction.
  */
 #define M68K_INSTRUCTION_HOOK       OPT_SPECIFY_HANDLER
-#define M68K_INSTRUCTION_CALLBACK(pc) {extern void instr_hook_callback(unsigned int); instr_hook_callback(pc);}
+#define M68K_INSTRUCTION_CALLBACK(pc) {extern void mem_instr_callback(unsigned int); mem_instr_callback(pc);}
 
 
 /* If ON, the CPU will emulate the 4-byte prefetch queue of a real 68000 */

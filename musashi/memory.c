@@ -48,8 +48,10 @@ static mem_buffer_t         mem_buffers[MEM_NUM_IDS];
 
 static bool                 mem_bus_error_enabled;
 static bool                 mem_trace_enabled;
+static bool                 mem_instr_trace_enabled;
 static mem_device_handler_t mem_dev_handler;
 static mem_trace_handler_t  mem_trace_handler;
+static mem_instr_handler_t  mem_instr_handler;
 
 static uint32_t             mem_fc;
 #define FC_IS_PROGRAM       ((mem_fc == 2) || (mem_fc == 6))
@@ -61,6 +63,14 @@ void
 mem_set_fc(unsigned int new_fc)
 {
     mem_fc = new_fc;
+}
+
+void
+mem_instr_callback(unsigned int pc)
+{
+    if (mem_instr_trace_enabled && (mem_instr_handler != NULL)) {
+        mem_instr_handler(pc);
+    }
 }
 
 __attribute__((unused))
@@ -313,23 +323,31 @@ mem_add_device(uint32_t base, uint32_t size)
 void
 mem_set_device_handler(mem_device_handler_t handler)
 {
-    if (handler) {
-        mem_dev_handler = handler;
-    }
+    mem_dev_handler = handler;
 }
 
 void
 mem_set_trace_handler(mem_trace_handler_t handler)
 {
-    if (handler) {
-        mem_trace_handler = handler;
-    }
+    mem_trace_handler = handler;
 }
 
 void
-mem_enable_tracing(bool enable)
+mem_set_instr_handler(mem_instr_handler_t handler)
+{
+    mem_instr_handler = handler;
+}
+
+void
+mem_enable_mem_tracing(bool enable)
 {
     mem_trace_enabled = enable && mem_trace_handler;
+}
+
+void
+mem_enable_instr_tracing(bool enable)
+{
+    mem_instr_trace_enabled = enable && mem_trace_handler;
 }
 
 void

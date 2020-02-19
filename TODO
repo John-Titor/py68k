@@ -15,8 +15,10 @@ Things to investigate / fix:
   ✔ suppress read traces for instruction fetches @done (20-02-02 18:24)
   ✔ newlib sbrk is busted; make stack bigger (room for stack + heap) & grow up from _end @done (20-02-08 23:32)
   ☐ exceptions in callbacks seem to trash the emulator state; probably better to hard-abort out of them
-  ☐ decide between public attributes and property methods. Device._name, size, address - anything not computed.
+  ✔ decide between public attributes and property methods. Device._name, size, address - anything not computed. @done (20-02-15 09:35)
   ☐ lots of Emulator functionality needs an instance, but that's inconvenient; maybe classmethods? module-level functions?
+  ☐ symbolication for e.g. address zero is printing vector names
+    ☐ MAP operations should not symbolicate
   
 Features:
   ✔ need new memory model, support multiple disjoint memories (RAM, ROM), > 16MiB @done (20-01-28 15:54)
@@ -34,6 +36,9 @@ Features:
   ✔ factor ROM loading into emu.add_memory rather than duplicating in the target @done (20-02-08 09:35)
 
 Tracing:
+  Needs a complete rethink
+  ☐ trace message via NatFeat
+  ☐ tracing on/off for-X-cycles via NatFeat
   ☐ device read/write
   ☐ memory read/write
   ☐ register mapping
@@ -46,7 +51,6 @@ Tracing:
   ☐ spurious interrupt
   ☐ quantum start / end
   ☐ emulator, device debug message
-  ☐ 
 Devices:
   ☐ root_device should signal bus error on failed register decode
   ✔ always call device.tick after handling register access @done (20-02-04 22:48)
@@ -63,8 +67,8 @@ Devices:
     ☐ migrate existing tick logic to callbacks @high
   ✔ hash register/size/direction to handler rather than just address to read/write handlers @done (20-02-13 22:33)
   ☐ support 'fallback' handlers (16-bit access to 8 or 32-bit registers, etc.)
-  ☐ --trace-io is global, would be nice to have per-dev tracing effective here
-  ☐ Device.__trace/__diagnostic is a mess, rethink -> use logging framework?
+  ✔ --trace-io is global, would be nice to have per-dev tracing effective here @done (20-02-18 23:15)
+  ✔ Device.__trace/__diagnostic is a mess, rethink -> use logging framework? @done (20-02-18 23:15)
   68681:
    ✔ don't assume 'off-by-one' mapping, configure for low-byte, high-byte and packed @done (20-02-08 09:18)
    ☐ implement echo & loopback modes @low

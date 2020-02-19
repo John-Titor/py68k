@@ -1,6 +1,6 @@
-from device import Device
 from collections import deque
 
+from device import Device
 from musashi import m68k
 
 
@@ -132,11 +132,11 @@ class Timer(Device):
             self.deassert_ipl()
             self._deadline = 0
             self.callback_cancel('count')
-            self.trace('timer cancelled')
+            self.trace(info='timer cancelled')
         else:
             self._deadline = self.current_cycle + value * self._scaler
             self.callback_at(self._deadline, 'count', self._callback)
-            self.trace(f'timer set for {self._deadline}, now {self.current_cycle}')
+            self.trace(info=f'timer set for {self._deadline}, now {self.current_cycle}')
 
     def _write_vector(self, value):
         self._r_vector = value
@@ -144,11 +144,11 @@ class Timer(Device):
     def _callback(self):
         if (self._deadline > 0):
             if (self._deadline <= self.current_cycle):
-                self.trace('timer expired')
+                self.trace(info='timer expired')
                 self.assert_ipl()
                 self._deadline = 0
             else:
-                self.trace('spurious callback')
+                self.trace(info='spurious callback')
                 self.callback_at(self._deadline, 'count', self._callback)
 
     def reset(self):
