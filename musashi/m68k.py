@@ -108,11 +108,11 @@ lib = CDLL(lib_file)
 int_ack_callback_func_type = CFUNCTYPE(c_int, c_int)
 bkpt_ack_callback_func_type = CFUNCTYPE(None, c_uint)
 reset_instr_callback_func_type = CFUNCTYPE(None)
-pc_changed_callback_func_type = CFUNCTYPE(None, c_uint)
+# pc_changed_callback_func_type = CFUNCTYPE(None, c_uint)
 tas_instr_callback_func_type = CFUNCTYPE(c_int)
-illg_instr_callback_func_type = CFUNCTYPE(c_int, c_int)
-fc_callback_func_type = CFUNCTYPE(None, c_uint)
-instr_hook_callback_func_type = CFUNCTYPE(None, c_uint)
+illg_instr_callback_func_type = CFUNCTYPE(c_int, c_uint)
+# fc_callback_func_type = CFUNCTYPE(None, c_uint)
+# instr_hook_callback_func_type = CFUNCTYPE(None, c_uint)
 
 
 def set_int_ack_callback(func):
@@ -151,10 +151,10 @@ def set_illg_instr_callback(func):
     lib.m68k_set_illg_instr_callback(illg_instr_callback)
 
 
-def set_fc_callback(func):
-    global fc_callback
-    fc_callback = fc_callback_func_type(func)
-    lib.m68k_set_fc_callback(fc_callback)
+# def set_fc_callback(func):
+#     global fc_callback
+#     fc_callback = fc_callback_func_type(func)
+#     lib.m68k_set_fc_callback(fc_callback)
 
 
 # def set_instr_hook_callback(func):
@@ -270,7 +270,6 @@ lib.mem_read_memory.restype = c_uint
 device_handler_func_type = CFUNCTYPE(c_uint, c_uint, c_uint, c_uint, c_uint)
 trace_handler_func_type = CFUNCTYPE(None, c_uint, c_uint, c_uint, c_uint)
 instr_handler_func_type = CFUNCTYPE(None, c_uint)
-jump_handler_func_type = CFUNCTYPE(None, c_uint)
 
 
 def mem_add_memory(base, size, writable=True):
@@ -300,12 +299,6 @@ def mem_set_instr_handler(func):
     global instr_handler
     instr_handler = instr_handler_func_type(func)
     lib.mem_set_instr_handler(instr_handler)
-
-
-def mem_set_jump_handler(func):
-    global jump_handler
-    jump_handler = jump_handler_func_type(func)
-    lib.mem_set_jump_handler(jump_handler)
 
 
 def mem_enable_mem_tracing(enable=True):

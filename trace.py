@@ -119,6 +119,17 @@ class Trace(object):
 
         self._trace_file.write(f'{action:<10}: {afield:>40} : {info.strip()}\n')
 
+    def enable(self, what, enable):
+        if what == 'everything':
+            self.enable('memory', enable)
+            self.enable('instructions', enable)
+        elif what == 'memory':
+            m68k.mem_enable_mem_tracing(enable)
+        elif what == 'instructions':
+            m68k.mem_enable_instr_tracing(enable)
+        else:
+            raise RuntimeError(f'unknown trace category {what}')
+
     def log(self, msg):
         self.trace(action='LOG', info=msg)
 

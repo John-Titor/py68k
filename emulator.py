@@ -78,8 +78,8 @@ class Emulator(object):
         m68k.cpu_init()
 
         # attach unconditional callback functions
-        m68k.set_reset_instr_callback(self.cb_reset)
         self._reset_hooks = list()
+        m68k.set_reset_instr_callback(self.cb_reset)
         m68k.set_illg_instr_callback(self.cb_illg)
 
         # load an executable?
@@ -246,9 +246,9 @@ class Emulator(object):
         Illegal instruction handler - implement 'native features' emulator API
         """
         if instr == 0x7300:     # nfID
-            return self._nfID(m68k.get_reg(self.registers['SP']) + 4)
+            return self._nfID(m68k.get_reg(m68k.REG_SP) + 4)
         elif instr == 0x7301:     # nfCall
-            return self._nfCall(m68k.get_reg(self.registers['SP']) + 4)
+            return self._nfCall(m68k.get_reg(m68k.REG_SP) + 4)
 
         # instruction not handled by emulator, legitimately illegal
         return m68k.ILLG_ERROR
@@ -269,6 +269,8 @@ class Emulator(object):
             m68k.set_reg(m68k.REG_D0, 2)
         elif id == 'NF_SHUTDOWN':
             m68k.set_reg(m68k.REG_D0, 3)
+        elif id == 'NF_TRACE':
+            m68k.set_reg(m68k.REG_D0, 4)
         else:
             return m68k.ILLG_ERROR
         return m68k.ILLG_OK
@@ -283,6 +285,8 @@ class Emulator(object):
             return self._nf_stderr(argptr + 4)
         elif func == 3:
             self.fatal('shutdown requested')
+        elif func == 4:
+            self._trace.enable('everything', m68k.mem_read_memory(argptr + 4, m68k.MEM_SIZE_32))
         else:
             return m68k.ILLG_ERROR
         return m68k.ILLG_OK
@@ -296,13 +300,11 @@ class Emulator(object):
 
     def _get_string(self, argptr):
         strptr = m68k.mem_read_memory(argptr, m68k.MEM_SIZE_32)
-        if strptr == 0xffffffff:
+        if strptr == 0:
             return None
         result = str()
         while True:
             c = m68k.mem_read_memory(strptr, m68k.MEM_SIZE_8)
-            if c == 0xffffffff:
-                return None
             if (c == 0) or (len(result) > 255):
                 return result
             result += chr(c)
