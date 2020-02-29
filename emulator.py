@@ -53,6 +53,20 @@ class Emulator(object):
         'SCC68070': m68k.CPU_TYPE_SCC68070,
     }
 
+    nf_map = {
+        1: 'NF_VERSION',
+        2: 'NF_STDERR',
+        3: 'NF_SHUTDOWN',
+        4: 'NF_CTRL',
+        5: 'NF_DISKIO'
+    }
+
+    nf_ctl_ops = {
+        1: 'TRACE_STOP',             # immediate stop
+        2: 'TRACE_START',            # arg = number of cycles to trace
+        3: 'RUN_CYCLES',             # arg = number of cycles before shutdown
+    }
+
     def __init__(self, args, cpu="68000", frequency=8000000):
 
         self._dead = False
@@ -66,7 +80,7 @@ class Emulator(object):
         self._elapsed_cycles = 0
         self._device_deadline = 0
         self._default_quantum = int(self._cpu_frequency / 1000)  # ~1ms in cycles
-        self._device_callback_at = 0
+        self._device_callback_at = sys.maxsize
         self._device_callback_fn = None
 
         # intialise the CPU
@@ -95,12 +109,21 @@ class Emulator(object):
             self._cycle_limit = args.cycle_limit
         else:
             self._cycle_limit = sys.maxsize
+        self._trace_cycle_limit = sys.maxsize
 
         if not args.disable_bus_error:
             m68k.mem_enable_bus_error(True)
 
         # wire up the root device
         self.add_device(args, RootDevice, emulator=self)
+
+        # hook up the NF disk file (if supplie)
+        if args.nf_diskfile is not None:
+            self._nf_diskfile = open(args.nf_diskfile, "wb")
+            self._nf_diskfile.seek(0, SEEK_END)
+            self._nf_diskfile_size = self._nf_diskfile.tell()
+        else:
+            self._nf_diskfile = None
 
     @classmethod
     def add_arguments(cls, parser, default_load_address=0x400):
@@ -123,6 +146,10 @@ class Emulator(object):
                             action='store_true',
                             default=False,
                             help='disable generation of bus error on any bad memory access')
+        parser.add_argument('--nf-diskfile',
+                            type=str,
+                            metavar='DISK-FILE',
+                            help='open DISK-FILE and make it available to the emulated program via the Native Features API')
 
     def run(self):
         if self._load_image is not None:
@@ -150,20 +177,24 @@ class Emulator(object):
         while not self._dead:
 
             quantum = self._default_quantum
-            if self._device_callback_at > self._elapsed_cycles:
-                if (self._elapsed_cycles + quantum) > self._device_callback_at:
-                    quantum = self._device_callback_at - self._elapsed_cycles
+            if (self._elapsed_cycles + quantum) > self._device_callback_at:
+                quantum = self._device_callback_at - self._elapsed_cycles
+            if (self._elapsed_cycles + quantum) > self._cycle_limit:
+                quantum = self._cycle_limit - self._elapsed_cycles
+            if (self._elapsed_cycles + quantum) > self._trace_cycle_limit:
+                quantum = self._trace_cycle_limit - self._elapsed_cycles
 
             self.trace(action='RUN', info=f'quantum {quantum} cycles @ {self._elapsed_cycles}')
             run_count = m68k.execute(quantum)
             self.trace(action='STOP', info=f'ran for {run_count} cycles')
             self._elapsed_cycles += run_count
 
-            if self._elapsed_cycles > self._cycle_limit:
+            if self._elapsed_cycles >= self._cycle_limit:
                 self.fatal('cycle limit exceeded')
-
-            if (self._device_callback_at > 0) and (self._elapsed_cycles >= self._device_callback_at):
-                self._device_callback_at = 0
+            if self._elapsed_cycles >= self._trace_cycle_limit:
+                self._trace.enable('everything', False)
+            if self._elapsed_cycles >= self._device_callback_at:
+                self._device_callback_at = sys.maxsize
                 self._device_callback_fn()
 
     def finish(self):
@@ -194,7 +225,7 @@ class Emulator(object):
             if (len(mem_image) > size):
                 raise RuntimeError(f"Memory image image {from_file} must be <= {size:#x}")
             print(f'loaded {len(mem_image)} bytes at {base:#x}')
-            mem_write_bulk(base, mem_image)
+            m68k.mem_write_bulk(base, mem_image)
 
     def add_device(self, args, dev, **options):
         """
@@ -257,36 +288,33 @@ class Emulator(object):
         self.fatal('\rExit due to user interrupt.')
 
     def _nfID(self, argptr):
-        id = self._get_string(argptr)
-        if id is None:
+        name = self._get_string(argptr)
+        if name is None:
             return m68k.ILLG_ERROR
 
-        if id == 'NF_VERSION':
-            m68k.set_reg(m68k.REG_D0, 1)
-        # elif id == 'NF_NAME':
-        #    m68k.set_reg(m68k.REG_D0, 1)
-        elif id == 'NF_STDERR':
-            m68k.set_reg(m68k.REG_D0, 2)
-        elif id == 'NF_SHUTDOWN':
-            m68k.set_reg(m68k.REG_D0, 3)
-        elif id == 'NF_TRACE':
-            m68k.set_reg(m68k.REG_D0, 4)
-        else:
-            return m68k.ILLG_ERROR
-        return m68k.ILLG_OK
+        for func_code, func_name in self.nf_map.items():
+            if name == func_name:
+                m68k.set_reg(m68k.REG_D0, func_code)
+                return m68k.ILLG_OK
+        return m68k.ILLG_ERROR
 
     def _nfCall(self, argptr):
-        func = m68k.mem_read_memory(argptr, m68k.MEM_SIZE_32)
-        if func == 0:   # NF_VERSION
+        func_code = m68k.mem_read_memory(argptr, m68k.MEM_SIZE_32)
+        try:
+            func_name = self.nf_map[func_code]
+        except KeyEror:
+            return m68k.ILLG_ERROR
+
+        if func_name == 'NF_VERSION':
             m68k.set_reg(m68k.REG_D0, 1)
-        # elif func == 1:
-        #    pass
-        elif func == 2:
-            return self._nf_stderr(argptr + 4)
-        elif func == 3:
+        elif func_name == 'NF_STDERR':
+            self._nf_stderr(argptr + 4)
+        elif func_name == 'NF_SHUTDOWN':
             self.fatal('shutdown requested')
-        elif func == 4:
-            self._trace.enable('everything', m68k.mem_read_memory(argptr + 4, m68k.MEM_SIZE_32))
+        elif func_name == 'NF_CTRL':
+            self._nf_trace(argptr + 4)
+        elif func_name == 'NF_DISKIO':
+            m68k.set_reg(m68k.REG_D0, 0 if self._nf_diskio(argptr + 4) else 1)
         else:
             return m68k.ILLG_ERROR
         return m68k.ILLG_OK
@@ -297,6 +325,59 @@ class Emulator(object):
             return m68k.ILLG_ERROR
         sys.stderr.write(msg)
         return m68k.ILLG_OK
+
+    def _nf_ctl(self, argptr):
+        cmd = m68k_read_memory(argptr, m68k.MEM_SIZE_32)
+        arg = m68k_read_memory(argptr + 4, m68k.MEM_SIZE_32)
+
+        try:
+            op = self.nf_ctl_ops[cmd]
+        except KeyError:
+            return m68k.ILLG_ERROR
+
+        if op == 'TRACE_STOP':
+            self._trace.enable('everything', False)
+        elif op == 'TRACE_START':
+            self._trace.enable('everything', True)
+            if arg == 0:
+                self._trace_cycle_limit = sys.maxsize
+            else:
+                self._trace_cycle_limit = self.current_cycle + arg
+                m68k.end_timeslice()
+        elif op == 'RUN_CYCLES':
+            if arg == 0:
+                self._cycle_limit = sys.maxsize
+            else:
+                self._cycle_limit = self.current_cycle + arg
+                m68k.end_timeslice()
+        else:
+            return m68k.ILLG_ERROR
+        return m68k.ILLG_OK
+
+    def _nf_diskio(self, argptr):
+        cmd = m68k_read_memory(argptr, m68k.MEM_SIZE_32)
+        byteoff = m68k_read_memory(argptr + 4, m68k.MEM_SIZE_32) * 512
+        buf = m68k_read_memory(argptr + 8, m68k.MEM_SIZE_32)
+
+        if self._nf_diskfile is None:
+            return False
+        if byteoff >= self._nf_diskfile_size:
+            return False
+        if cmd == 1:
+            self._nf_diskfile.seek(byteoff)
+            blk = self._nf_diskfile.read(512)
+            if (len(blk) == 512):
+                m68k.mem_write_bulk(buf, blk)
+                return True
+        elif cmd == 2:
+            blk = bytes()
+            while len(blk) < 512:
+                blk.append(m68k.mem_read_memory(buf, m68k.MEM_SIZE_32))
+                buf += 4
+            self._nf_diskfile.seek(byteoff)
+            self._nf_diskfile.write(blk)
+            return True
+        return False
 
     def _get_string(self, argptr):
         strptr = m68k.mem_read_memory(argptr, m68k.MEM_SIZE_32)
