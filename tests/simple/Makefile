@@ -1,6 +1,7 @@
 CC		 = m68k-unknown-elf-gcc
 SIZE		 = m68k-unknown-elf-size
 PROG		 = test
+DISKFILE	 = disk.dmg
 
 ELF		 = $(PROG).elf
 SRCS		 = $(wildcard *.c)
@@ -22,9 +23,15 @@ CFLAGS		 = -m68010 \
 		   -MD \
 		   -e main
 
+$(PROG): $(ELF) $(DISKFILE)
+
 $(ELF): $(SRCS) $(MAKEFILE_LIST)
 	$(CC) -o $@ $(CFLAGS) $(SRCS)
 	@$(SIZE) $@
+
+.PHONY: $(DISKFILE)
+$(DISKFILE):
+	yes 1234567 | dd bs=512 count=8 > $@
 
 .PHONY: clean
 clean:

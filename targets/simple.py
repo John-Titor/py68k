@@ -1,6 +1,6 @@
 from emulator import Emulator
 from musashi import m68k
-from devices.simple import UART, Timer
+from devices.simple import UART, Timer, Disk
 
 
 def add_arguments(parser):
@@ -33,6 +33,7 @@ def add_arguments(parser):
                         help='memory size')
     Timer.add_arguments(parser)
     UART.add_arguments(parser)
+    Disk.add_arguments(parser)
 
 
 def configure(args):
@@ -50,5 +51,8 @@ def configure(args):
                    Timer,
                    address=iobase + 0x1000,
                    interrupt=m68k.IRQ_6)
+    emu.add_device(args,
+                   Disk,
+                   address=iobase + 0x2000)
 
     return emu
