@@ -173,7 +173,7 @@ class Trace(object):
             dis = m68k.disassemble(pc, Trace.__emu._cpu_type)
             reg_info = ''
             for reg in self.registers:
-                if dis.find(reg) is not -1:
+                if dis.find(reg) != -1:
                     reg_info += ' {}={:#x}'.format(reg, m68k.get_reg(self.registers[reg]))
 
             self.trace(action='EXECUTE', address=pc, info=f'{dis:30} {reg_info}')
