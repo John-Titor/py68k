@@ -191,6 +191,9 @@ class MC68681(Device):
                 ('CRB',         0x14, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._b.write_cr),
                 ('TBB',         0x16, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._b.write_tb),
                 ('IVR',         0x18, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_ivr),
+#                ('OPCR',        0x1a, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_opcr),
+#                ('OPSET',       0x1c, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_opset),
+#                ('OPRST',       0x1e, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_oprst),
             ])
         elif options['register_arrangement'] == '8-bit':
             self.add_registers([
@@ -228,10 +231,6 @@ class MC68681(Device):
 
         self.reset()
         self.trace(info='init done')
-
-    @classmethod
-    def add_arguments(cls, parser):
-        pass
 
     def _read_ipcr(self):
         return 0x03  # CTSA/CTSB are always asserted
