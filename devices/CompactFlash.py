@@ -52,7 +52,7 @@ class CompactFlash(Device):
                 ('CYLINDER_LOW',   0x09, m68k.MEM_SIZE_8,  m68k.MEM_READ, self._read_cylinder_low),
                 ('CYLINDER_HIGH',  0x0b, m68k.MEM_SIZE_8,  m68k.MEM_READ, self._read_cylinder_high),
                 ('DRIVE/HEAD',     0x0d, m68k.MEM_SIZE_8,  m68k.MEM_READ, self._read_drive_head),
-                ('COMMAND',        0x0f, m68k.MEM_SIZE_8,  m68k.MEM_READ, self._read_status),
+                ('STATUS',         0x0f, m68k.MEM_SIZE_8,  m68k.MEM_READ, self._read_status),
 
                 ('DATA16',         0x00, m68k.MEM_SIZE_16, m68k.MEM_WRITE, self._write_data16),
                 ('DATA8',          0x01, m68k.MEM_SIZE_8,  m68k.MEM_WRITE, self._write_data8),
