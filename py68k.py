@@ -28,7 +28,6 @@ parser.add_argument('--help',
 actiongroup = parser.add_mutually_exclusive_group()
 actiongroup.add_argument('--target',
                          type=str,
-                         default='none',
                          metavar='TARGET',
                          help='target to emulate')
 actiongroup.add_argument('--list-targets',
