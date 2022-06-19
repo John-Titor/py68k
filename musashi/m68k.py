@@ -282,6 +282,10 @@ def mem_add_device(base, size):
     return lib.mem_add_device(c_uint(base),
                               c_uint(size))
 
+def mem_move_memory(src, dst, size):
+    return lib.mem_move_memory(c_uint(src),
+                               c_uint(dst),
+                               c_uint(size))
 
 def mem_set_device_handler(func):
     global device_handler
