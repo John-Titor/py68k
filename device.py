@@ -76,6 +76,12 @@ class Device(object):
             Device.__devices.append(new_dev)
 
     @classmethod
+    def find_device(cls, name):
+        for dev in Device.__devices:
+            if dev.name == name:
+                return dev
+
+    @classmethod
     def cb_reset(cls):
         for dev in Device.__devices:
             dev.reset()
