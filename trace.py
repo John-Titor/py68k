@@ -2,6 +2,7 @@
 
 from imageELF import ELFImage
 from musashi import m68k
+import sys
 
 
 class Trace(object):
