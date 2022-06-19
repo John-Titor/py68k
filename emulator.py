@@ -221,7 +221,7 @@ class Emulator(object):
             raise RuntimeError(f"failed to add memory 0x{base:x}/{size}")
 
         if from_file is not None:
-            mem_image = open(args.eeprom, "rb").read(size + 1)
+            mem_image = open(from_file, "rb").read(size + 1)
             if (len(mem_image) > size):
                 raise RuntimeError(f"Memory image image {from_file} must be <= {size:#x}")
             print(f'loaded {len(mem_image)} bytes at {base:#x}')
