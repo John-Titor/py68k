@@ -208,7 +208,7 @@ mem_write(uint32_t address, uint32_t size, uint32_t value)
         m68k_pulse_bus_error();
         m68k_end_timeslice();
     }
-    fprintf(stderr, "bad write 0x%x=0x%x: pte %svalid, %s, id %d\n", 
+    fprintf(stderr, "bad write 0x%x<-0x%x: pte %svalid, %s, id %d\n", 
             address,
             value,
             pte.valid ? "" : "in",
@@ -292,6 +292,37 @@ mem_add_memory(uint32_t base, uint32_t size, bool writable)
     mem_set_range(base, size, (pte_t){.valid = 1, .device = 0, .id = buffer_id });
 
     mem_trace(MEM_MAP, base, size, writable ? MEM_MAP_RAM : MEM_MAP_ROM);
+    return true;
+}
+
+bool
+mem_move_memory(uint32_t src, uint32_t dst, uint32_t size)
+{
+    // destination must be free
+    if (!mem_range_is_free(dst, size)) {
+        return false;
+    }
+
+    // src/size must cover a whole buffer
+    pte_t pte = mem_pagetable[src / MEM_PAGE_SIZE];
+    if (!pte.valid) {
+        return false;
+    }
+    uint8_t buffer_id = pte.id;
+    mem_buffer_t *bp = mem_buffers + buffer_id;
+    if ((bp->base != src) || (bp->size != size)) {
+        return false;
+    }
+
+    // unmap the old range
+    mem_set_range(src, size, (pte_t){.valid = 0});
+
+    // move the buffer
+    bp->base = dst;
+
+    // map the new range
+    mem_set_range(dst, size, (pte_t){.valid = 1, .device= 0, .id = buffer_id});
+
     return true;
 }
 
@@ -384,6 +415,7 @@ mem_read_memory(uint32_t address, uint32_t size)
             }
         }
     }
+    debug("unhandled read at 0x%x/%u", address, size);
     return 0;
 }
 
@@ -421,8 +453,6 @@ void
 mem_write_bulk(uint32_t address, uint8_t *buffer, uint32_t size)
 {
     // could make this faster...
-    debug("bulk write 0x%x, from %p size %u", address, buffer, size);
-
     while (size) {
         pte_t       pte = mem_pagetable[address / MEM_PAGE_SIZE];
         uint32_t    page_offset = address % MEM_PAGE_SIZE;
