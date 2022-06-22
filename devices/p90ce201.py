@@ -151,7 +151,8 @@ class P90UART(Device):
     def _read_sbuf(self):
         if len(self._rxfifo) > 0:
             value = self._rxfifo.popleft()
-            self.callback_after(P90Timer.uart_rx_period() * 10, 'rxrdy', self._rx_done)
+            # self.callback_after(P90Timer.uart_rx_period() * 10, 'rxrdy', self._rx_done)
+            self.callback_after(100, 'rxrdy', self._rx_done)
         else:
             value = 0xff
         return value
@@ -173,7 +174,8 @@ class P90UART(Device):
 
     def _write_sbuf(self, value):
         self.console_handle_output(chr(value).encode('latin-1'))
-        self.callback_after(P90Timer.uart_tx_period() * 10, 'txrdy', self._tx_done)
+        # self.callback_after(P90Timer.uart_tx_period() * 10, 'txrdy', self._tx_done)
+        self.callback_after(100, 'txrdy', self._tx_done)
 
     def _write_scon(self, value):
         self._scon = value
@@ -318,7 +320,7 @@ class P90Timer(Device):
             # counting started - register for overflow callback
             self._start_counting()
         else:
-            # counting stopped - update T 
+            # counting stopped - update T
             self._update_t()
             # ... and deregister overflow callback
             self._stop_counting()
