@@ -278,14 +278,20 @@ def mem_add_memory(base, size, writable=True):
                               c_bool(writable))
 
 
-def mem_add_device(base, size):
-    return lib.mem_add_device(c_uint(base),
-                              c_uint(size))
+def mem_remove_memory(base):
+    return lib.mem_remove_memory(c_uint(base))
+
 
 def mem_move_memory(src, dst, size):
     return lib.mem_move_memory(c_uint(src),
                                c_uint(dst),
                                c_uint(size))
+
+
+def mem_add_device(base, size):
+    return lib.mem_add_device(c_uint(base),
+                              c_uint(size))
+
 
 def mem_set_device_handler(func):
     global device_handler

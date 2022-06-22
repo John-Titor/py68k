@@ -8,6 +8,7 @@ typedef enum {
     INVALID_READ = 'r',
     INVALID_WRITE = 'w',
     MEM_MAP = 'M',
+    MEM_UNMAP = 'U',
 } mem_operation_t;
 
 typedef enum {
@@ -45,6 +46,8 @@ void mem_enable_instr_tracing(bool enable);
 void mem_enable_bus_error(bool enable); 
 
 bool mem_add_memory(uint32_t base, uint32_t size, bool writable);
+bool mem_remove_memory(uint32_t base);
+bool mem_move_memory(uint32_t src, uint32_t dst, uint32_t size);
 bool mem_add_device(uint32_t base, uint32_t size);
 
 uint32_t mem_read_memory(uint32_t address, uint32_t size);

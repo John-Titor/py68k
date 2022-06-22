@@ -227,6 +227,13 @@ class Emulator(object):
             print(f'loaded {len(mem_image)} bytes at {base:#x}')
             m68k.mem_write_bulk(base, mem_image)
 
+    def remove_memory(self, base):
+        """
+        Remove RAM/ROM from the emulation
+        """
+        if not m68k.mem_remove_memory(base):
+            raise RuntimeError(f"failed to remove memory 0x{base:x}/{size}")
+
     def add_device(self, args, dev, **options):
         """
         Attach a device to the emulator

@@ -266,14 +266,13 @@ mem_add_memory(uint32_t base, uint32_t size, bool writable)
     }
 
     // get a buffer ID - fail if none available
-    uint8_t buffer_id;
-    for (buffer_id = 0; ; buffer_id++) {
+    for (int buffer_id = 0; buffer_id < MEM_NUM_IDS; buffer_id++) {
         if (!mem_buffers[buffer_id].buf) {
             break;
         }
-        if (buffer_id >= MEM_NUM_IDS) {
-            return false;
-        }
+    }
+    if (buffer_id >= MEM_NUM_IDS) {
+        return false;
     }
 
     // check that pages aren't already in use
@@ -292,6 +291,32 @@ mem_add_memory(uint32_t base, uint32_t size, bool writable)
     mem_set_range(base, size, (pte_t){.valid = 1, .device = 0, .id = buffer_id });
 
     mem_trace(MEM_MAP, base, size, writable ? MEM_MAP_RAM : MEM_MAP_ROM);
+    return true;
+}
+
+bool
+mem_remove_memory(uint32_t base)
+{
+    // must be a buffer at this address
+    for (int buffer_id = 0; buffer_id < MEM_NUM_IDS; buffer_id++) {
+        if (mem_buffers[buffer_id].base == base) {
+            break;
+        }
+    }
+    if (buffer_id >= MEM_NUM_IDS) {
+        return false;
+    }
+
+    // update pagetable
+    mem_buffer_t *bp = mem_buffers + buffer_id;
+    mem_set_range(bp->base, bp->size, (pte_t){.valid = 0});
+
+    mem_trace(MEM_UNMAP, bp->base, bp->size, 0);
+
+    // release buffer
+    free(bp->buf);
+    bp->buf = NULL;
+
     return true;
 }
 
