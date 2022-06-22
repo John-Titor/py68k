@@ -49,6 +49,8 @@ class Channel():
         self._rxfifo = deque()
         self._rxEnable = False
         self._txEnable = False
+        self._tsrEmpty = True
+        self._thrEmpty = True
         self._update_isr()
 
     def read_mr(self):
@@ -59,11 +61,15 @@ class Channel():
             return self._mr1
 
     def read_sr(self):
-        value = self.STATUS_TRANSMITTER_EMPTY | self.STATUS_TRANSMITTER_READY
+        value = 0
+        if self._tsrEmpty:
+            value |= self.STATUS_TRANSMITTER_EMPTY
+        if self._thrEmpty:
+            value |= self.STATUS_TRANSMITTER_READY
         rxcount = len(self._rxfifo)
         if rxcount > 0:
             value |= self.STATUS_RECEIVER_READY
-            if (rxcount > 1):
+            if (rxcount > 2):
                 value |= self.STATUS_FIFO_FULL
         return value
 
@@ -107,21 +113,43 @@ class Channel():
         self._update_isr()
 
     def write_tb(self, value):
-        self._parent.console_handle_output(chr(value).encode('latin-1'))
+        if self._is_console:
+            self._parent.console_handle_output(chr(value).encode('latin-1'))
+        if self._tsrEmpty:
+            # send straight to shift register
+            self._tx_start()
+        else:
+            # buffer in holding register
+            self._thrEmpty = False
+
+    def _tx_start(self):
+        # start "transmitting" a byte
+        self._tsrEmpty = False
+        # 38400bps = ~200µs / byte = ~2000 8MHz CPU cycles
+        self._parent.callback_after(2000, f'tsr{self._port}', self._tx_done)
+
+    def _tx_done(self):
+        # byte "transmission" completed
+        self._tsrEmpty = True
+        # next byte in holding register, start "transmitting" it
+        if not self._thrEmpty:
+            self._thrEmpty = True
+            self._tx_start()
 
     def _update_isr(self):
         isr = 0
         if self._txEnable:
             isr |= self.INT_TXRDY
         if self._rxEnable:
-            if len(self._rxfifo) > (1 if self._mr1 & self.MR1_FFULL_EN else 0):
+            if len(self._rxfifo) > (2 if self._mr1 & self.MR1_FFULL_EN else 0):
                 isr |= self.INT_RXRDY_FFULL
         self._parent.update_channel_isr(self._port, isr)
 
     def _handle_console_input(self, input):
-        for c in input:
-            self._rxfifo.append(c)
-        self._update_isr()
+        if self._rxEnable:
+            for c in input:
+                self._rxfifo.append(c)
+            self._update_isr()
 
 
 class MC68681(Device):
