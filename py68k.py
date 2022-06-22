@@ -24,6 +24,9 @@ parser = argparse.ArgumentParser(description='m68k emulator',
 parser.add_argument('--help',
                     action='store_true',
                     help='print this help')
+parser.add_argument('--profile-emulator',
+                    action='store_true',
+                    help='profile execution of the emulator')
 
 actiongroup = parser.add_mutually_exclusive_group()
 actiongroup.add_argument('--target',
@@ -69,6 +72,10 @@ args = parser.parse_args()
 emu = target.configure(args)
 
 # run some instructions
-emu.run()
+if args.profile_emulator:
+    import cProfile
+    cProfile.run('emu.run()', 'profile.out')
+else:
+    emu.run()
 emu.finish()
 print(emu.fatal_info())
