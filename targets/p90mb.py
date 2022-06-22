@@ -1,10 +1,11 @@
 from emulator import Emulator
 from device import Device
-from devices.CompactFlash import CompactFlash
+from devices.compactflash import CompactFlash
 from devices import p90ce201
 from musashi import m68k
 
 p90_flipped = False
+
 
 def add_arguments(parser):
     """add commandline argument definitions to the parser"""

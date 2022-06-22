@@ -1,6 +1,6 @@
 from emulator import Emulator
-from devices.CompactFlash import CompactFlash
-from devices.MC68681 import MC68681
+from devices.compactflash import CompactFlash
+from devices.mc68681 import MC68681
 from musashi import m68k
 
 

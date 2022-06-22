@@ -1,125 +1,152 @@
 Things to investigate / fix:
-  ✔ fix disassembly printing as bytes object (b'...') @done (20-01-11 09:14)
-  ✘ tabs don't print correctly @cancelled (20-02-01 10:12)
-  ✔ add reset hook & pass reset to peripherals @done (20-01-28 15:54)
-  ✘ look at pyglet to handle console @cancelled (20-01-28 15:55)
-  ✘ emulator.cb_buserror <- do something useful here @cancelled (20-01-31 09:34)
-  ✘ use device mapping handle to find devices faster? (limitation of 1 device per page regardless...) @cancelled (20-01-31 09:34)
-  ☐ fix console in/output paths to be bytes all the way through
-  ✔ fix disassembly @done (20-02-01 10:12)
-  ✔ fix symbolication @done (20-02-01 10:12)
-  ✘ fix tracing triggers @cancelled (20-02-01 10:12)
-  ✔ interrupts are broken @done (20-02-07 20:34)
-  ✔ need to allow devices on arbitrary address boundaries; 4K is too coarse @done (20-01-31 09:34)
-  ✔ --debug-device doesn't seem to work with a device and 'device' @done (20-02-02 23:00)
-  ✔ suppress read traces for instruction fetches @done (20-02-02 18:24)
-  ✔ newlib sbrk is busted; make stack bigger (room for stack + heap) & grow up from _end @done (20-02-08 23:32)
   ☐ exceptions in callbacks should be suitably fatal, not ignored
-  ✔ decide between public attributes and property methods. Device._name, size, address - anything not computed. @done (20-02-15 09:35)
-  ✔ lots of Emulator functionality needs an instance, but that's inconvenient; maybe classmethods? module-level functions? @done (20-02-21 20:22)
   ☐ symbolication for e.g. address zero is printing vector names
     ☐ MAP operations should not symbolicate
-  ✔ quantum not capped at Emulator._cycle_limit @done (20-02-21 20:22)
   
 Features:
-  ✔ need new memory model, support multiple disjoint memories (RAM, ROM), > 16MiB @done (20-01-28 15:54)
-    ✔ implement m68k_read/write_memory_8/16/32(), m68k_read_disassembler_16/32 @done (20-01-24 21:51)
-    ✔ add_memory_range(base, size, writable, with_contents(optional)) @done (20-01-24 22:38)
-    ✔ add_device_range(base, size, ID) @done (20-01-24 22:38)
-    ✔ bus error should be optional @done (20-01-24 21:51)
-    ✔ flat mapping table for all of 32-bit space, one entry per mapping unit (e.g. 4k) @done (20-01-24 21:51)
-    ✔ table entry: valid bit, writable bit, handler ID @done (20-01-24 21:51)
-    ✔ handlers for memory, device @done (20-01-24 21:51)
-    ✔ emulator access to memory @done (20-01-25 23:24)
-  ✔ multiple ELF files for symbol lookup @done (20-01-30 09:01)
-  ✔ load ELF file to RAM & go @done (20-01-31 09:34)
-  ✘ inject arbitrary RAM contents @cancelled (20-01-31 09:34)
-  ✔ factor ROM loading into emu.add_memory rather than duplicating in the target @done (20-02-08 09:35)
 
+Console:
+  ✔ Characters not making it to apps: ^S, ^Q, ^Z (suspends console), ^Y (suspends console) @done (22-06-21 19:43)
+  ☐ Characters not making it to apps: ESC, cursor keys (timing?)
+  ☐ Consider using Textual to build a better console? (plus other stuff)
 Tracing:
   Needs a complete rethink
   ☐ trace message via NatFeat
-  ✔ tracing on/off for-X-cycles via NatFeat @done (20-02-21 20:22)
-  ✔ device read/write @done (20-02-21 20:22)
-  ✔ memory read/write @done (20-02-21 20:22)
-  ✔ register mapping @done (20-02-21 20:22)
-  ✔ memory mapping @done (20-02-21 20:22)
-  ✔ instruction execution @done (20-02-21 20:22)
   ☐ exceptions
   ☐ jumps
   ☐ ipl set
   ☐ interrupt acknowledge
   ☐ spurious interrupt
-  ✔ quantum start / end @done (20-02-21 20:22)
-    probably want to suppress this normally...
   ☐ emulator, device debug message
 Devices:
   ☐ root_device should signal bus error on failed register decode
-  ✔ always call device.tick after handling register access @done (20-02-04 22:48)
-    ✔ tick should also check for interrupt assertion @done (20-02-04 22:48)
-    ✘ don't mask set_irq against CPSR @cancelled (20-02-04 22:48)
-    ✔ scrub devices for redundant status updates @done (20-02-04 23:08)
-    ✔ scrub devices : don't allow tick to return None @done (20-02-04 23:08)
-  ✔ option to en/disable buserror generation @done (20-02-21 20:23)
-  ✘ console input should cause tick @cancelled (20-02-21 20:23)
-  ✔ better handling of deadlines returned by tick - perhaps track a per-device deadline rather than just the lowest from the most recent poll? device register accesses can cause deadlines to be lost... @done (20-02-07 20:34)
-  ✔ some way to pass options to devices without having them be commandline args -> use **options @done (20-02-08 00:09)
-  ✔ tick -> callback_at / callback_after @done (20-02-08 23:34)
-    ✔ identify callbacks with dev/'name' tuple, attrs when and who-to-call @done (20-02-08 23:34)
-    ✔ migrate existing tick logic to callbacks @high @done (20-02-21 20:23)
-  ✔ hash register/size/direction to handler rather than just address to read/write handlers @done (20-02-13 22:33)
-  ☐ support 'fallback' handlers (16-bit access to 8 or 32-bit registers, etc.), port sizing (32b cycle to two 16b regs, etc)
-  ✔ --trace-io is global, would be nice to have per-dev tracing effective here @done (20-02-18 23:15)
-  ✔ Device.__trace/__diagnostic is a mess, rethink -> use logging framework? @done (20-02-18 23:15)
+  ☐ support 'fallback' handlers (16-bit access to 8 or 32-bit registers, etc.), port sizing (32b cycle to two 16b regs, etc) @low
   68681:
-   ✔ don't assume 'off-by-one' mapping, configure for low-byte, high-byte and packed @done (20-02-08 09:18)
    ☐ implement echo & loopback modes @low
+   ☐ implement transmit / receive character delays
+     "better" FIFO models?
   I2C:
-    ☐ generic I2C 'bus'
-    ☐ DS1232 RTC
+    ☐ generic I2C 'bus' for device emulations
+    ☐ DS1232 RTC @low
+      maybe not worthwhile as Tiny68k implementation is faulty
     ☐ display?
+    ☐ p90ce201 I2C
   CF/ATA:
-    ✘ reset behaviour @cancelled (20-02-04 22:32)
-      Can't be done for Tiny68k as /CS1 is permanently high
-    ✔ IDENTIFY DEVICE @done (20-01-11 09:14)
-    ✔ option to set disk file @done (20-01-25 21:40)
-    ✔ don't assume spacing between registers, support at least packed and 1-spaced @done (20-02-08 09:18)
+  RC2014:
+    ☐ framework for board emulations
+
 Tiny68k:
-  ☐ I2C realtime clock device 
-  ☐ I2C EEPROM emulation
-  ✔ --rom commandline argument, loads ROM -> RAM at startup @done (20-01-25 21:37)
-  ✔ emulator.add_reset_hook -> call at reset @done (20-01-25 22:34)
-  ✔ emulator.add_memory @done (20-01-25 22:52)
-  ✔ --eeprom commandline argument, supplies EEPROM contents @done (20-01-28 15:54)
-    ✔ if empty, don't copy ROM -> RAM @done (20-01-28 16:00)
-  ✔ device registration base/length -> mem_add_device @done (20-01-28 15:54)
+  ☐ I2C EEPROM emulation @low
   
 P90MB:
   ☐ device models
-    ✔ UART @done (20-01-29 09:09)
-    ✔ CompactFlash @done (20-01-29 09:09)
-    ✔ Timers @done (20-01-31 09:35)
-    ☐ external interrupt controller
+    ☐ external interrupt controller @low
+      may not be worthwhile since nothing is connected
     ☐ I2C
-    ☐ RC2014 boards?
-  ✔ --rom commandline argument, places code in ROM @done (20-01-31 09:35)
+      what should be connected?
+    ☐ RC2014 boards
+  ☐ UART: seem to be losing transmit-complete interrupts
+    hard to reproduce
+  ✔ UART: reduce character delay for snappier user experience @done (22-06-21 19:44)
+
+Rosco M68k v2:
+
+T030:
+
+T68kRC:
+  ☐ derive from Tiny68k
 
 Simple:
-  ✔ fix device models @done (20-01-30 10:08)
   ☐ test cases
   
 EmuTOS:
-  ✔ Illegal instruction callbacks for Native Feature interfaces @done (20-02-02 00:08)
     ☐ testing
 
 Console:
-  ✔ emulator socket connection @done (20-01-28 20:52)
-    ✔ send output @done (20-01-28 15:44)
-    ✔ collect input @done (20-01-28 17:45)
-  ✔ "waiting for connection, hit ^C to exit" message @done (20-01-28 20:52)
-  ✔ don't die on ^C in console server @done (20-01-28 20:52)
   ☐ wrapping protocol for additional widgets?
     ☐ consider urwid, curtsies, npyscreen as widget toolkits for this
 
 Documentation:
   ☐ update README.md
+
+Archive:
+ ✘ I2C realtime clock device @cancelled (22-06-19 12:27) @project(Tiny68k)
+  clock on the board is busted, not worth it
+ ✔ fix console in/output paths to be bytes all the way through @done (22-06-19 12:25) @project(Things to investigate / fix)
+ ✘ console input should cause tick @cancelled (20-02-21 20:23) @project(Devices)
+ ✔ option to en/disable buserror generation @done (20-02-21 20:23) @project(Devices)
+ ✔ migrate existing tick logic to callbacks @high @done (20-02-21 20:23) @project(Devices)
+ ✔ tracing on/off for-X-cycles via NatFeat @done (20-02-21 20:22) @project(Tracing)
+ ✔ register mapping @done (20-02-21 20:22) @project(Tracing)
+ ✔ quantum start / end @done (20-02-21 20:22) @project(Tracing)
+  probably want to suppress this normally...
+ ✔ quantum not capped at Emulator._cycle_limit @done (20-02-21 20:22) @project(Things to investigate / fix)
+ ✔ memory read/write @done (20-02-21 20:22) @project(Tracing)
+ ✔ memory mapping @done (20-02-21 20:22) @project(Tracing)
+ ✔ lots of Emulator functionality needs an instance, but that's inconvenient; maybe classmethods? module-level functions? @done (20-02-21 20:22) @project(Things to investigate / fix)
+ ✔ instruction execution @done (20-02-21 20:22) @project(Tracing)
+ ✔ device read/write @done (20-02-21 20:22) @project(Tracing)
+ ✔ Device.__trace/__diagnostic is a mess, rethink -> use logging framework? @done (20-02-18 23:15) @project(Devices)
+ ✔ --trace-io is global, would be nice to have per-dev tracing effective here @done (20-02-18 23:15) @project(Devices)
+ ✔ decide between public attributes and property methods. Device._name, size, address - anything not computed. @done (20-02-15 09:35) @project(Things to investigate / fix)
+ ✔ hash register/size/direction to handler rather than just address to read/write handlers @done (20-02-13 22:33) @project(Devices)
+ ✔ tick -> callback_at / callback_after @done (20-02-08 23:34) @project(Devices)
+ ✔ identify callbacks with dev/'name' tuple, attrs when and who-to-call @done (20-02-08 23:34) @project(Devices)
+ ✔ newlib sbrk is busted; make stack bigger (room for stack + heap) & grow up from _end @done (20-02-08 23:32) @project(Things to investigate / fix)
+ ✔ factor ROM loading into emu.add_memory rather than duplicating in the target @done (20-02-08 09:35) @project(Features)
+ ✔ don't assume spacing between registers, support at least packed and 1-spaced @done (20-02-08 09:18) @project(Devices / CF/ATA)
+ ✔ don't assume 'off-by-one' mapping, configure for low-byte, high-byte and packed @done (20-02-08 09:18) @project(Devices / 68681)
+ ✔ some way to pass options to devices without having them be commandline args -> use **options @done (20-02-08 00:09) @project(Devices)
+ ✔ interrupts are broken @done (20-02-07 20:34) @project(Things to investigate / fix)
+ ✔ better handling of deadlines returned by tick - perhaps track a per-device deadline rather than just the lowest from the most recent poll? device register accesses can cause deadlines to be lost... @done (20-02-07 20:34) @project(Devices)
+ ✔ scrub devices for redundant status updates @done (20-02-04 23:08) @project(Devices)
+ ✔ scrub devices : don't allow tick to return None @done (20-02-04 23:08) @project(Devices)
+ ✘ don't mask set_irq against CPSR @cancelled (20-02-04 22:48) @project(Devices)
+ ✔ tick should also check for interrupt assertion @done (20-02-04 22:48) @project(Devices)
+ ✔ always call device.tick after handling register access @done (20-02-04 22:48) @project(Devices)
+ ✘ reset behaviour @cancelled (20-02-04 22:32) @project(Devices / CF/ATA)
+  Can't be done for Tiny68k as /CS1 is permanently high
+ ✔ --debug-device doesn't seem to work with a device and 'device' @done (20-02-02 23:00) @project(Things to investigate / fix)
+ ✔ suppress read traces for instruction fetches @done (20-02-02 18:24) @project(Things to investigate / fix)
+ ✔ Illegal instruction callbacks for Native Feature interfaces @done (20-02-02 00:08) @project(EmuTOS)
+ ✘ tabs don't print correctly @cancelled (20-02-01 10:12) @project(Things to investigate / fix)
+ ✘ fix tracing triggers @cancelled (20-02-01 10:12) @project(Things to investigate / fix)
+ ✔ fix symbolication @done (20-02-01 10:12) @project(Things to investigate / fix)
+ ✔ fix disassembly @done (20-02-01 10:12) @project(Things to investigate / fix)
+ ✔ Timers @done (20-01-31 09:35) @project(P90MB)
+ ✔ --rom commandline argument, places code in ROM @done (20-01-31 09:35) @project(P90MB)
+ ✘ use device mapping handle to find devices faster? (limitation of 1 device per page regardless...) @cancelled (20-01-31 09:34) @project(Things to investigate / fix)
+ ✘ inject arbitrary RAM contents @cancelled (20-01-31 09:34) @project(Features)
+ ✘ emulator.cb_buserror <- do something useful here @cancelled (20-01-31 09:34) @project(Things to investigate / fix)
+ ✔ need to allow devices on arbitrary address boundaries; 4K is too coarse @done (20-01-31 09:34) @project(Things to investigate / fix)
+ ✔ load ELF file to RAM & go @done (20-01-31 09:34) @project(Features)
+ ✔ fix device models @done (20-01-30 10:08) @project(Simple)
+ ✔ multiple ELF files for symbol lookup @done (20-01-30 09:01) @project(Features)
+ ✔ UART @done (20-01-29 09:09) @project(P90MB)
+ ✔ CompactFlash @done (20-01-29 09:09) @project(P90MB)
+ ✔ emulator socket connection @done (20-01-28 20:52) @project(Console)
+ ✔ don't die on ^C in console server @done (20-01-28 20:52) @project(Console)
+ ✔ "waiting for connection, hit ^C to exit" message @done (20-01-28 20:52) @project(Console)
+ ✔ collect input @done (20-01-28 17:45) @project(Console)
+ ✔ if empty, don't copy ROM -> RAM @done (20-01-28 16:00) @project(Tiny68k)
+ ✘ look at pyglet to handle console @cancelled (20-01-28 15:55) @project(Things to investigate / fix)
+ ✔ need new memory model, support multiple disjoint memories (RAM, ROM), > 16MiB @done (20-01-28 15:54) @project(Features)
+ ✔ device registration base/length -> mem_add_device @done (20-01-28 15:54) @project(Tiny68k)
+ ✔ add reset hook & pass reset to peripherals @done (20-01-28 15:54) @project(Things to investigate / fix)
+ ✔ --eeprom commandline argument, supplies EEPROM contents @done (20-01-28 15:54) @project(Tiny68k)
+ ✔ send output @done (20-01-28 15:44) @project(Console)
+ ✔ emulator access to memory @done (20-01-25 23:24) @project(Features)
+ ✔ emulator.add_memory @done (20-01-25 22:52) @project(Tiny68k)
+ ✔ emulator.add_reset_hook -> call at reset @done (20-01-25 22:34) @project(Tiny68k)
+ ✔ option to set disk file @done (20-01-25 21:40) @project(Devices / CF/ATA)
+ ✔ --eeprom commandline argument, loads ROM -> RAM at startup @done (20-01-25 21:37) @project(Tiny68k)
+ ✔ add_memory_range(base, size, writable, with_contents(optional)) @done (20-01-24 22:38) @project(Features)
+ ✔ add_device_range(base, size, ID) @done (20-01-24 22:38) @project(Features)
+ ✔ table entry: valid bit, writable bit, handler ID @done (20-01-24 21:51) @project(Features)
+ ✔ implement m68k_read/write_memory_8/16/32(), m68k_read_disassembler_16/32 @done (20-01-24 21:51) @project(Features)
+ ✔ handlers for memory, device @done (20-01-24 21:51) @project(Features)
+ ✔ flat mapping table for all of 32-bit space, one entry per mapping unit (e.g. 4k) @done (20-01-24 21:51) @project(Features)
+ ✔ bus error should be optional @done (20-01-24 21:51) @project(Features)
+ ✔ fix disassembly printing as bytes object (b'...') @done (20-01-11 09:14) @project(Things to investigate / fix)
+ ✔ IDENTIFY DEVICE @done (20-01-11 09:14) @project(Devices / CF/ATA)
+
