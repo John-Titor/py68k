@@ -167,11 +167,11 @@ class Emulator(object):
         signal.signal(signal.SIGINT, self._keyboard_interrupt)
         print('\nHit ^C to exit\n')
 
-        # reset everything
-        self.cb_reset()
-
         # reset the CPU ready for execution
         m68k.pulse_reset()
+
+        # reset everything
+        self.cb_reset()
 
         self._start_time = time.time()
         while not self._dead:
