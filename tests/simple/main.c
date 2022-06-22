@@ -187,7 +187,7 @@ main(void)
     current_time = TIMER_COUNT;
     TIMER_COUNT = 500;
     while (timer_ticks == 0) {
-        assert(TIMER_COUNT < (current_time + 5000));
+        assert(TIMER_COUNT < (current_time + 50000));
     }
     fprintf(stderr, "countdown interrupt works\n");
 
@@ -202,6 +202,8 @@ main(void)
     } else {
         fprintf(stderr, "disk: tests pass\n");
     }
+
+    fprintf(stderr, "native features %ssupported\n", _detect_native_features() ? "" : "not ");
 
     fprintf(stderr, "tests complete\n");
     fflush(stdout);

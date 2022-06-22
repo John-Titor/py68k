@@ -1,5 +1,5 @@
-CC		 = m68k-unknown-elf-gcc
-SIZE		 = m68k-unknown-elf-size
+CC		 = m68k-elf-gcc
+SIZE		 = m68k-elf-size
 PROG		 = test
 DISKFILE	 = disk.dmg
 
@@ -19,7 +19,7 @@ CFLAGS		 = -m68010 \
 		   -Wl,-gc-sections \
 		   -Wl,--emit-relocs \
 		   -Wl,-z,stack-size=1048576 \
-		   -Wl,--section-start=.text=0 \
+		   -Wl,--section-start=.text=0x1000 \
 		   -MD \
 		   -e main
 

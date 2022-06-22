@@ -123,13 +123,13 @@ extern uint32_t		_nfCall(uint32_t ID, ...);
  */
 __asm__
 (
+"_detect_native_features:                                               \n"
 #if defined(__mc68010) || defined(__mc68020) || defined(__mc68030) || defined(__mc68040)
 "        movec   %vbr, %a0                                              \n"
 "        add.l   #0x10, %a0                                             \n"
 #else
 "        move.l  #0x10, %a0                                             \n"
 #endif
-"_detect_native_features:                                               \n"
 "        moveq   #0, %d0             /* assume no NatFeats available */ \n"
 "        move.l  %sp, %a1                                               \n"
 "        move.l  (%a0), %d1                                             \n"
