@@ -82,6 +82,7 @@ MEM_WRITE = ord('W')
 INVALID_READ = ord('r')
 INVALID_WRITE = ord('w')
 MEM_MAP = ord('M')
+MEM_UNMAP = ord('U')
 MEM_SIZE_8 = 8
 MEM_SIZE_16 = 16
 MEM_SIZE_32 = 32

@@ -36,7 +36,8 @@ class Trace(object):
         m68k.MEM_WRITE: 'WRITE',
         m68k.INVALID_READ: 'BAD_READ',
         m68k.INVALID_WRITE: 'BAD_WRITE',
-        m68k.MEM_MAP: 'MAP'
+        m68k.MEM_MAP: 'MAP',
+        m68k.MEM_UNMAP: 'UNMAP',
     }
 
     __global_tracer = None
@@ -112,9 +113,9 @@ class Trace(object):
         if address is not None:
             symname = self._sym_for_address(address)
             if symname is not None:
-                afield = '{} / {:#08x}'.format(symname, address)
+                afield = f'{symname} / {address:#010x}'
             else:
-                afield = '{:#08x}'.format(address)
+                afield = f'{address:#010x}'
         else:
             afield = ''
 
@@ -149,6 +150,8 @@ class Trace(object):
                     info = f'DEVICE {size:#x}'
                 else:
                     raise RuntimeError(f'unexpected mapping type {value}')
+            elif operation == m68k.MEM_UNMAP:
+                info = f'{size:#x}'
             else:
                 if size == m68k.MEM_SIZE_8:
                     info = f'{value:#04x}'
@@ -162,7 +165,7 @@ class Trace(object):
             self.trace(action, addr, info)
 
         except Exception:
-            self.fatal_exception(sys.exc_info())
+            Trace.__emu.fatal_exception(sys.exc_info())
 
         return 0
 
