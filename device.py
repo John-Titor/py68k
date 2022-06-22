@@ -120,16 +120,15 @@ class Device(object):
 
     @classmethod
     def __cb_access(cls, operation, address, size, value):
-        Device.trace(action='ACCESS',
-                     address=address,
-                     info='access attempt')
+        # check for a register operation
         try:
             return Register.access(address, size, operation, value)
         except KeyError:
-            # will try aperture decode...
             pass
         except Exception:
             Device.__emu.fatal_exception(sys.exc_info())
+
+        # check for a mapped aperture
         try:
             return Device.__access(address, size, operation, value)
         except KeyError:
@@ -140,6 +139,8 @@ class Device(object):
         except Exception:
             Device.__emu.fatal_exception(sys.exc_info())
 
+        # This decoded to a peripheral, but missed both register and aperture;
+        # results would depend on implementation quirks...
         return 0
 
     @classmethod

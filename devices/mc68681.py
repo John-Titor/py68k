@@ -189,76 +189,59 @@ class MC68681(Device):
         self._a = Channel(self, 'A', console_port == 'A')
         self._b = Channel(self, 'B', console_port == 'B')
 
-        if options['register_arrangement'] == '16-bit':
-            self.add_registers([
-                ('MRA',         0x00, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._a.read_mr),
-                ('SRA',         0x02, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._a.read_sr),
-                ('RBA',         0x06, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._a.read_rb),
-                ('IPCR',        0x08, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_ipcr),
-                ('ISR',         0x0a, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_isr),
-                ('CUR',         0x0c, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_cur),
-                ('CLR',         0x0e, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_clr),
-                ('MRB',         0x10, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._b.read_mr),
-                ('SRB',         0x12, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._b.read_sr),
-                ('RBB',         0x16, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._b.read_rb),
-                ('IVR',         0x18, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_ivr),
-                ('IPR',         0x1a, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_ipr),
-                ('STARTCC',     0x1c, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_startcc),
-                ('STOPCC',      0x1e, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_stopcc),
-
-                ('MRA',         0x00, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._a.write_mr),
-                ('CSRA',        0x02, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._a.write_csr),
-                ('CRA',         0x04, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._a.write_cr),
-                ('TBA',         0x06, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._a.write_tb),
-                ('ACR',         0x08, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_acr),
-                ('IMR',         0x0a, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_imr),
-                ('CTUR',        0x0c, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_ctur),
-                ('CTLR',        0x0e, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_ctlr),
-                ('MRB',         0x10, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._b.write_mr),
-                ('CSRB',        0x12, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._b.write_csr),
-                ('CRB',         0x14, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._b.write_cr),
-                ('TBB',         0x16, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._b.write_tb),
-                ('IVR',         0x18, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_ivr),
-#                ('OPCR',        0x1a, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_opcr),
-#                ('OPSET',       0x1c, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_opset),
-#                ('OPRST',       0x1e, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_oprst),
-            ])
-        elif options['register_arrangement'] == '8-bit':
-            self.add_registers([
-                ('MRA',         0x00, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._a.read_mr),
-                ('SRA',         0x01, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._a.read_sr),
-                ('RBA',         0x03, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._a.read_rb),
-                ('IPCR',        0x04, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_ipcr),
-                ('ISR',         0x05, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_isr),
-                ('CUR',         0x06, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_cur),
-                ('CLR',         0x07, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_clr),
-                ('MRB',         0x08, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._b.read_mr),
-                ('SRB',         0x09, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._b.read_sr),
-                ('RBB',         0x0b, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._b.read_rb),
-                ('IVR',         0x0c, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_ivr),
-                ('IPR',         0x0d, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_ipr),
-                ('STARTCC',     0x0e, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_startcc),
-                ('STOPCC',      0x0f, m68k.MEM_SIZE_8, m68k.MEM_READ,  self._read_stopcc),
-
-                ('MRA',         0x00, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._a.write_mr),
-                ('CSRA',        0x01, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._a.write_csr),
-                ('CRA',         0x02, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._a.write_cr),
-                ('TBA',         0x03, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._a.write_tb),
-                ('ACR',         0x04, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_acr),
-                ('IMR',         0x05, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_imr),
-                ('CTUR',        0x06, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_ctur),
-                ('CTLR',        0x07, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_ctlr),
-                ('MRB',         0x08, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._b.write_mr),
-                ('CSRB',        0x09, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._b.write_csr),
-                ('CRB',         0x0a, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._b.write_cr),
-                ('TBB',         0x0b, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._b.write_tb),
-                ('IVR',         0x0c, m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_ivr),
-            ])
-        else:
-            raise RuntimeError(f'register_arrangement {options["register_arrangement"]} not recognized')
+        # handle assorted oddball register layouts
+        regs = {
+            m68k.MEM_READ: [('MRA',     self._a.read_mr),
+                            ('SRA',     self._a.read_sr),
+                            ('CSRA',    self._no_access),
+                            ('RBA',     self._a.read_rb),
+                            ('IPCR',    self._read_ipcr),
+                            ('ISR',     self._read_isr),
+                            ('CUR',     self._read_cur),
+                            ('CLR',     self._read_clr),
+                            ('MRB',     self._b.read_mr),
+                            ('SRB',     self._b.read_sr),
+                            ('CSRB',    self._no_access),
+                            ('RBB',     self._b.read_rb),
+                            ('IVR',     self._read_ivr),
+                            ('IPR',     self._read_ipr),
+                            ('STARTCC', self._read_startcc),
+                            ('STOPCC',  self._read_stopcc)],
+            m68k.MEM_WRITE: [('MRA',    self._a.write_mr),
+                             ('CSRA',   self._a.write_csr),
+                             ('CRA',    self._a.write_cr),
+                             ('TBA',    self._a.write_tb),
+                             ('ACR',    self._write_acr),
+                             ('IMR',    self._write_imr),
+                             ('CTUR',   self._write_ctur),
+                             ('CTLR',   self._write_ctlr),
+                             ('MRB',    self._b.write_mr),
+                             ('CSRB',   self._b.write_csr),
+                             ('CRB',    self._b.write_cr),
+                             ('TBB',    self._b.write_tb),
+                             ('IVR',    self._write_ivr)]
+        }
+        for access, regs in regs.items():
+            for index, reg in enumerate(regs):
+                name, handler = reg
+                if options['register_arrangement'] == '16-bit':
+                    offsets = [index * 2]
+                elif options['register_arrangement'] == '16-bit-doubled':
+                    offsets = [index * 2, index * 2 + 1]
+                elif options['register_arrangement'] == '8-bit':
+                    offsets = [index]
+                else:
+                    raise RuntimeError(f'unrecognized register_arrangement option: '
+                                       f'{options["register_arrangement"]}')
+                for offset in offsets:
+                    self.add_register(name, offset, m68k.MEM_SIZE_8, access, handler)
 
         self.reset()
         self.trace(info='init done')
+
+    def _no_access(self):
+        self.trace(info='access to forbidden register')
+        return 0
 
     def _read_ipcr(self):
         return 0x03  # CTSA/CTSB are always asserted

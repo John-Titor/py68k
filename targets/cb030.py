@@ -99,7 +99,7 @@ def configure(args):
                    MC68681,
                    address=0xfffff000,
                    interrupt=m68k.IRQ_2,
-                   register_arrangement='16-bit')
+                   register_arrangement='16-bit-doubled')
     emu.add_device(args,
                    CompactFlash,
                    address=0xffffe000,
