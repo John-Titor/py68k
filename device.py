@@ -115,10 +115,25 @@ class Device(object):
         try:
             value = Register.access(address, size, operation, value)
         except KeyError:
-            # XXX bus error?
-            Device.trace('DECODE', f'no register to handle {operation}:{address:#x}/{size}')
+            try:
+                value = Device.__access(address, size, operation, value)
+            except KeyError:
+                # XXX bus error?
+                Device.trace('DECODE', f'no register to handle {operation}:{address:#x}/{size}')
 
         return value
+
+    @classmethod
+    def __access(cls, address, size, operation, value):
+        for dev in cls.__devices:
+            try:
+                if (((dev.address is not None)
+                     and (address >= dev.address)
+                     and (address < (dev.address + dev.size)))):
+                    return dev.access(address - dev.address, size, operation, value)
+            except AttributeError:
+                continue
+        raise KeyError
 
     ########################################
     # Device callbacks
