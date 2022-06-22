@@ -155,6 +155,12 @@ class Device(object):
         """
         self.callback_at(self.current_cycle + cb_after, cb_name, cb_func)
 
+    def callback_every(self, cb_period, cb_name, cb_func):
+        """
+        arrange for cb_func to be called every cb_period cycles
+        """
+        self.__add_callback(self, self.current_cycle + cp_period, cb_name, cb_func, cb_period)
+
     def callback_cancel(self, cb_name):
         """
         cancel the callback cb_name for this device
@@ -162,10 +168,11 @@ class Device(object):
         self.__remove_callback(self, cb_name)
 
     @classmethod
-    def __add_callback(cls, cb_dev, cb_at, cb_name, cb_func):
+    def __add_callback(cls, cb_dev, cb_at, cb_name, cb_func, cb_period=None):
         Device.__callbacks[(cb_dev, cb_name)] = {
             'cycle': cb_at,
-            'func': cb_func
+            'func': cb_func,
+            'period': cb_period,
         }
         Device.__set_callback()
 
@@ -200,8 +207,13 @@ class Device(object):
             if info['cycle'] <= Device.__emu.current_cycle:
                 _, handle = ident
                 func = info['func']
-                Device.__callbacks.pop(ident, False)
+                if info['period'] is not None:
+                    info['cycle'] += info['period']
+                    Device.__callbacks[ident] = info
+                else:
+                    Device.__callbacks.pop(ident, False)
                 func()
+
         Device.__set_callback()
 
     ########################################
