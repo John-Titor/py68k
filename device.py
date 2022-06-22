@@ -42,7 +42,7 @@ class Device(object):
         self._asserted_ipl = 0
 
     @classmethod
-    def add_arguments(cls, parser):
+    def add_global_arguments(cls, parser):
         """Common arguments applying to all devices"""
         parser.add_argument('--debug-device',
                             action='append',
@@ -51,6 +51,10 @@ class Device(object):
                             help='enable debugging for DEVICE-NAME, \'Device\''
                             ' to trace device framework.')
         Register.add_arguments(parser)
+
+    @classmethod
+    def add_arguments(cls, parser):
+        pass
 
     ########################################
     # Devices

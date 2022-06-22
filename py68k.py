@@ -59,7 +59,7 @@ if args.target is not None:
     target = importlib.import_module('targets.' + args.target)
     Emulator.add_arguments(parser)
     Trace.add_arguments(parser)
-    Device.add_arguments(parser)
+    Device.add_global_arguments(parser)
     RootDevice.add_arguments(parser)
     target.add_arguments(parser)
 
