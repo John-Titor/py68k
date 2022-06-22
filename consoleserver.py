@@ -19,7 +19,7 @@ class ConsoleServer():
 
     # VT100 and a smattering of later DEC encodings
     input_keymap = {
-        127: '\x08',
+        curses.KEY_BACKSPACE: '\x08',
         curses.KEY_DOWN: '\x1bB',
         curses.KEY_UP: '\x1bA',
         curses.KEY_LEFT: '\x1bD',
@@ -33,7 +33,7 @@ class ConsoleServer():
         curses.KEY_IC: '\x1b2',
         curses.KEY_NPAGE: '\x1b6',
         curses.KEY_PPAGE: '\x1b5',
-        curses.KEY_END: '\x1b4'
+        curses.KEY_END: '\x1b4',
     }
 
     banner = '\n Waiting for emulator, hit ^C three times quickly to exit.\n'
@@ -54,6 +54,7 @@ class ConsoleServer():
     def _run(self, win):
         curses.nonl()
         curses.curs_set(1)
+        curses.raw()
 
         self._win = win
         self._win.nodelay(1)
