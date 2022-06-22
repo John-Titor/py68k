@@ -1,10 +1,12 @@
 Things to investigate / fix:
-  ☐ exceptions in callbacks should be suitably fatal, not ignored
+  ✔ exceptions in callbacks should be suitably fatal, not ignored @high @done (22-06-21 21:45)
   ☐ symbolication for e.g. address zero is printing vector names
     ☐ MAP operations should not symbolicate
   
 Features:
-
+  ☐ option to make bus errors fatal
+Musashi:
+  ☐ recursive bus errors should just be double bus faults @high
 Console:
   ✔ Characters not making it to apps: ^S, ^Q, ^Z (suspends console), ^Y (suspends console) @done (22-06-21 19:43)
   ☐ Characters not making it to apps: ESC, cursor keys (timing?)
@@ -21,6 +23,8 @@ Tracing:
 Devices:
   ☐ root_device should signal bus error on failed register decode
   ☐ support 'fallback' handlers (16-bit access to 8 or 32-bit registers, etc.), port sizing (32b cycle to two 16b regs, etc) @low
+  ☐ device argument scheme is very confused
+    need per-class and per-instance behaviours to support multiple instances of a device
   68681:
    ☐ implement echo & loopback modes @low
    ☐ implement transmit / receive character delays

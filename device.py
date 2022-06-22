@@ -84,7 +84,11 @@ class Device(object):
     @classmethod
     def cb_reset(cls):
         for dev in Device.__devices:
-            dev.reset()
+            try:
+                dev.reset()
+            except Exception as e:
+                Device.__emu.fatal_exception(sys.exc_info())
+                break
 
     ########################################
     # Registers
@@ -112,16 +116,27 @@ class Device(object):
 
     @classmethod
     def __cb_access(cls, operation, address, size, value):
+        Device.trace(action='ACCESS',
+                     address=address,
+                     info='access attempt')
         try:
-            value = Register.access(address, size, operation, value)
+            return Register.access(address, size, operation, value)
         except KeyError:
-            try:
-                value = Device.__access(address, size, operation, value)
-            except KeyError:
-                # XXX bus error?
-                Device.trace('DECODE', f'no register to handle {operation}:{address:#x}/{size}')
+            # will try aperture decode...
+            pass
+        except Exception:
+            Device.__emu.fatal_exception(sys.exc_info())
+        try:
+            return Device.__access(address, size, operation, value)
+        except KeyError:
+            # XXX bus error?
+            Device.trace(action='DECODE',
+                         address=address,
+                         info=f'no register to handle {operation}:{size}')
+        except Exception:
+            Device.__emu.fatal_exception(sys.exc_info())
 
-        return value
+        return 0
 
     @classmethod
     def __access(cls, address, size, operation, value):
@@ -133,7 +148,7 @@ class Device(object):
                     return dev.access(address - dev.address, size, operation, value)
             except AttributeError:
                 continue
-        raise KeyError
+        raise KeyError()
 
     ########################################
     # Device callbacks
