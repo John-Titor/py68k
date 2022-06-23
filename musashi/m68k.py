@@ -83,6 +83,7 @@ INVALID_READ = ord('r')
 INVALID_WRITE = ord('w')
 MEM_MAP = ord('M')
 MEM_UNMAP = ord('U')
+MEM_MOVE = ord('o')
 MEM_SIZE_8 = 8
 MEM_SIZE_16 = 16
 MEM_SIZE_32 = 32
@@ -243,18 +244,18 @@ def get_reg(reg):
 
 
 def set_reg(reg, value):
-    lib.m68k_set_reg(c_int(reg), c_uint(value))
+    lib.m68k_set_reg(c_int(reg), c_uint32(value))
 
 
 def is_valid_instruction(instr, cpu_type):
-    return lib.m68k_is_valid_instruction(c_uint(instr),
-                                         c_uint(cpu_type))
+    return lib.m68k_is_valid_instruction(c_uint32(instr),
+                                         c_uint32(cpu_type))
 
 
 def disassemble(pc, cpu_type):
     n = lib.m68k_disassemble(__dis_buf,
-                             c_uint(pc),
-                             c_uint(cpu_type))
+                             c_uint32(pc),
+                             c_uint32(cpu_type))
     return __dis_buf.value.decode('latin-1')
 
 
@@ -265,33 +266,28 @@ unsigned int m68k_disassemble_raw(char* str_buff, unsigned int pc, const unsigne
 # Memory API
 
 lib.mem_add_memory.restype = c_bool
-lib.mem_add_device.restype = c_bool
-lib.mem_read_memory.restype = c_uint
+lib.mem_remove_memory.restype = c_bool
+lib.mem_move_memory.restype = c_bool
+lib.mem_read_memory.restype = c_uint32
 
-device_handler_func_type = CFUNCTYPE(c_uint, c_uint, c_uint, c_uint, c_uint)
-trace_handler_func_type = CFUNCTYPE(None, c_uint, c_uint, c_uint, c_uint)
-instr_handler_func_type = CFUNCTYPE(None, c_uint)
+device_handler_func_type = CFUNCTYPE(c_int64, c_uint32, c_uint32, c_uint32, c_uint32)
+trace_handler_func_type = CFUNCTYPE(None, c_uint32, c_uint32, c_uint32, c_uint32)
+instr_handler_func_type = CFUNCTYPE(None, c_uint32)
 
 
 def mem_add_memory(base, size, writable=True):
-    return lib.mem_add_memory(c_uint(base),
-                              c_uint(size),
+    return lib.mem_add_memory(c_uint32(base),
+                              c_uint32(size),
                               c_bool(writable))
 
 
 def mem_remove_memory(base):
-    return lib.mem_remove_memory(c_uint(base))
+    return lib.mem_remove_memory(c_uint32(base))
 
 
 def mem_move_memory(src, dst, size):
-    return lib.mem_move_memory(c_uint(src),
-                               c_uint(dst),
-                               c_uint(size))
-
-
-def mem_add_device(base, size):
-    return lib.mem_add_device(c_uint(base),
-                              c_uint(size))
+    return lib.mem_move_memory(c_uint32(src),
+                               c_uint32(dst))
 
 
 def mem_set_device_handler(func):
@@ -325,15 +321,15 @@ def mem_enable_bus_error(enable=True):
 
 
 def mem_read_memory(address, size):
-    return lib.mem_read_memory(c_uint(address), c_uint(size))
+    return lib.mem_read_memory(c_uint32(address), c_uint32(size))
 
 
 def mem_write_memory(address, size, value):
-    lib.mem_write_memory(c_uint(address), c_uint(size), c_uint(value))
+    lib.mem_write_memory(c_uint32(address), c_uint32(size), c_uint32(value))
 
 
 def mem_write_bulk(address, buffer):
-    lib.mem_write_bulk(c_uint(address), c_char_p(bytes(buffer)), c_uint(len(buffer)))
+    lib.mem_write_bulk(c_uint32(address), c_char_p(bytes(buffer)), c_uint32(len(buffer)))
 
 
 # Callback API

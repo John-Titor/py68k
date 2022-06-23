@@ -74,9 +74,6 @@ class Device(object):
             Device.__root_device.add_system_devices(args)
         else:
             new_dev = dev(args=args, **options)
-            if new_dev.address is not None:
-                if not m68k.mem_add_device(new_dev.address, new_dev.size):
-                    raise RuntimeError(f"could not map device @ 0x{new_dev.address:x}/{new_dev.size}")
             Device.__devices.append(new_dev)
 
     @classmethod
@@ -109,7 +106,9 @@ class Device(object):
             self.size = implied_size
 
         if self.debug or self.__class__.__debug:
-            Device.trace(action='MAP_REG', address=reg.address, info=f'{reg}')
+            Device.trace(action='MAP_REG',
+                         address=reg.address,
+                         info=f'{reg}:{Trace.operation_map[access]}:{size}')
 
     def add_registers(self, registers):
         """
@@ -135,13 +134,12 @@ class Device(object):
             # XXX bus error?
             Device.trace(action='DECODE',
                          address=address,
-                         info=f'no register to handle {operation}:{size}')
+                         info=f'no register to handle {Trace.operation_map[operation]}:{size}')
         except Exception:
             Device.__emu.fatal_exception(sys.exc_info())
 
-        # This decoded to a peripheral, but missed both register and aperture;
-        # results would depend on implementation quirks...
-        return 0
+        # nothing handling this operation
+        return -1
 
     @classmethod
     def __access(cls, address, size, operation, value):

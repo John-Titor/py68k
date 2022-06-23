@@ -14,26 +14,11 @@
 
 // Internal
 
-#if 1
+#if 0
 # define debug(fmt, ...)    fprintf(stderr, "mem: " fmt "\n" , __VA_ARGS__)
 #else
 # define debug(fmt, ...)    do {} while(0)
 #endif
-
-#define MEM_PAGE_SIZE   ((uint32_t)1 << 12)
-#define MEM_SIZE        ((uint64_t)1 << 32)
-#define MEM_NUM_PAGES   ((uint32_t)(MEM_SIZE / MEM_PAGE_SIZE))
-#define MEM_NUM_IDS     64
-
-#define IS_PAGE_ALIGNED(_x) (((_x) % MEM_PAGE_SIZE) == 0)
-#define PAGE_ROUND_UP(_x) ((((uint32_t)(_x)) + MEM_PAGE_SIZE - 1)  & (~(MEM_PAGE_SIZE - 1)))
-
-typedef struct
-{
-    uint8_t     valid:1;
-    uint8_t     device:1;
-    uint8_t     id:6;
-} pte_t;
 
 typedef struct
 {
@@ -43,8 +28,9 @@ typedef struct
     bool        writable;
 } mem_buffer_t;
 
-static pte_t                mem_pagetable[MEM_NUM_PAGES];
-static mem_buffer_t         mem_buffers[MEM_NUM_IDS];
+#define MEM_MAX_BUFFERS 16
+static mem_buffer_t         mem_buffers[MEM_MAX_BUFFERS];
+static unsigned             mem_num_buffers = 0;
 
 static bool                 mem_bus_error_enabled;
 static bool                 mem_trace_enabled;
@@ -73,50 +59,6 @@ mem_instr_callback(unsigned int pc)
     }
 }
 
-__attribute__((unused))
-static void
-mem_dump_pagetable()
-{
-    bool dots = false;
-    for (uint32_t page = 0; page < MEM_NUM_PAGES; page += 64) {
-        bool rowvalid = false;
-        for (uint32_t sub = 0; sub < 64; sub++) {
-            pte_t pte = mem_pagetable[page + sub];
-            if (pte.valid) {
-                rowvalid = true;
-                break;
-            }
-        }
-        if (!rowvalid) {
-            if (!dots) {
-                fprintf(stderr, "  ...\n");
-                dots = true;
-            }
-            continue;
-        } else {
-            dots = false;
-        }
-
-        fprintf(stderr, "%08x:", page * MEM_PAGE_SIZE);
-        for (uint32_t sub = 0; sub < 64; sub++) {
-            if ((sub % 8) == 0) {
-                fprintf(stderr, " ");
-            }
-            pte_t pte = mem_pagetable[page + sub];
-            if (pte.valid) {
-                if (pte.device) {
-                    fprintf(stderr, "*");
-                } else {
-                    fprintf(stderr, "%c", 'A' + pte.id);
-                }
-            } else {
-                fprintf(stderr, ".");
-            }
-        }
-        fprintf(stderr, "\n");
-    }
-}
-
 static void
 mem_trace(mem_operation_t operation, uint32_t address, uint32_t size, uint32_t value)
 {
@@ -126,129 +68,143 @@ mem_trace(mem_operation_t operation, uint32_t address, uint32_t size, uint32_t v
     }   
 }
 
+static mem_buffer_t *
+mem_find(uint32_t address)
+{
+    // scan buffers for address match
+    debug("looking for 0x%x...", address);
+    for (unsigned i = 0; i < mem_num_buffers; i++) {
+        mem_buffer_t *mb = mem_buffers + i;
+        debug("  consider %d:0x%x/0x%x", i, mb->base, mb->size);
+        if ((mb->buf != NULL) && 
+            (address >= mb->base) &&
+            ((address - mb->base) < mb->size)) {
+            debug("%s", "  found");
+            return mb;
+        }
+    }
+    debug("did not find address 0x%x", address);
+    return NULL;
+}
+
+static bool
+mem_range_is_free(uint32_t base, uint32_t size)
+{
+    for (unsigned i = 0; i < mem_num_buffers; i++) {
+        mem_buffer_t *mb = mem_buffers + i;
+        if (mb->buf == NULL) {
+            continue;
+        }
+        if ((base <= mb->base) &&
+            ((mb->base - base) < size)) {
+            return false;
+        }
+        if ((mb->base <= base) &&
+            ((base - mb->base) < mb->size)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static uint32_t
 mem_read(uint32_t address, uint32_t size)
 {
-    pte_t   pte = mem_pagetable[address / MEM_PAGE_SIZE];
+    mem_buffer_t *mb = mem_find(address);
 
-    if (pte.valid) {
-        if (pte.device) {
-            uint32_t ret = mem_dev_handler(MEM_READ, address, size, 0);
-//            mem_trace(MEM_READ, address, size, ret);
-            return ret;
-        } else {
-            mem_buffer_t *bp = mem_buffers + pte.id;
-            assert(bp->buf);
-            uint32_t offset = address - bp->base;
-            if ((offset + (size / 8)) <= bp->size) {
-                uint8_t *dp = bp->buf + offset;
-                uint32_t ret = 0;
-                switch (size) {
-                case MEM_SIZE_32:
-                    ret = *dp++;
-                    ret = (ret << 8) + *dp++;
-                    // FALLTHROUGH
-                case MEM_SIZE_16:
-                    ret = (ret << 8) + *dp++;
-                    // FALLTHROUGH
-                case MEM_SIZE_8:
-                    ret = (ret << 8) + *dp;
-                    mem_trace(MEM_READ, address, size, ret);
-                    return ret;
-                }
-            }
+    if (mb != NULL) {
+        uint32_t offset = (address - mb->base);
+
+        // check for overlapping end
+        if (offset > (mb->size - (size / 8))) {
+            goto bad;
+        }
+
+        // do endian swizzle & size conversion        
+        uint8_t *mptr = mb->buf + offset;
+        uint32_t mem_ret = 0;
+        switch (size) {
+        case MEM_SIZE_32:
+            mem_ret = *mptr++;
+            mem_ret = (mem_ret << 8) + *mptr++;
+            // FALLTHROUGH
+        case MEM_SIZE_16:
+            mem_ret = (mem_ret << 8) + *mptr++;
+            // FALLTHROUGH
+        case MEM_SIZE_8:
+            mem_ret = (mem_ret << 8) + *mptr;
+            mem_trace(MEM_READ, address, size, mem_ret);
+            return mem_ret;
         }
     }
+
+    // try a device operation
+    int64_t dev_ret = mem_dev_handler(MEM_READ, address, size, 0);
+    if (dev_ret >= 0) {
+        return (uint32_t)dev_ret;
+    }
+
+bad:
+    // nothing handling the op...
+    fprintf(stderr, "bad read 0x%x\n", address); 
+    mem_trace(INVALID_READ, address, size, ~(uint32_t)0);
+
     if (mem_bus_error_enabled) {
         m68k_pulse_bus_error();
         m68k_end_timeslice();
     }
-    fprintf(stderr, "bad read 0x%x: pte %svalid, %s, id %d\n", 
-            address, pte.valid ? "" : "in", pte.device ? "dev" : "mem", pte.id);
-    mem_trace(INVALID_READ, address, size, ~(uint32_t)0);
     return 0;
 }
 
 static void
 mem_write(uint32_t address, uint32_t size, uint32_t value)
 {
-    pte_t   pte = mem_pagetable[address / MEM_PAGE_SIZE];
+    mem_buffer_t *mb = mem_find(address);
 
-    if (pte.valid) {
-        if (pte.device) {
-//            mem_trace(MEM_WRITE, offset, size, value);
-            mem_dev_handler(MEM_WRITE, address, size, value);
+    if (mb != NULL) {
+        uint32_t offset = (address - mb->base);
+
+        // check writability
+        if (!mb->writable) {
+            goto bad;
+        }
+
+        // check for overlapping end
+        if (offset > (mb->size - (size / 8))) {
+            goto bad;
+        }
+
+        // do endian swizzle & size conversion        
+        uint8_t *mptr = mb->buf + offset;
+        mem_trace(MEM_WRITE, address, size, value);
+        switch (size) {
+        case MEM_SIZE_32:
+            *mptr++ = (value >> 24) & 0xff;
+            *mptr++ = (value >> 16) & 0xff;
+            // FALLTHROUGH
+        case MEM_SIZE_16:
+            *mptr++ = (value >> 8) & 0xff;
+            // FALLTHROUGH
+        case MEM_SIZE_8:
+            *mptr = value & 0xff;
             return;
-        } else {
-            mem_buffer_t *bp = mem_buffers + pte.id;
-            assert(bp->buf);
-            if (bp->writable) {
-                uint32_t offset = address - bp->base;
-                if ((offset + (size / 8)) <= bp->size) {
-                    uint8_t *dp = bp->buf + offset;
-                    mem_trace(MEM_WRITE, address, size, value);
-                    switch (size) {
-                    case MEM_SIZE_32:
-                        *dp++ = (value >> 24) & 0xff;
-                        *dp++ = (value >> 16) & 0xff;
-                        // FALLTHROUGH
-                    case MEM_SIZE_16:
-                        *dp++ = (value >> 8) & 0xff;
-                        // FALLTHROUGH
-                    case MEM_SIZE_8:
-                        *dp = value & 0xff;
-                        return;
-                    }
-                }
-            }
         }
     }
+
+    // try a device operation
+    int64_t dev_ret = mem_dev_handler(MEM_WRITE, address, size, value);
+    if (dev_ret >= 0) {
+        return;
+    }
+
+bad:
+    // nothing handling the op...
+    fprintf(stderr, "bad write 0x%x <- 0x%x\n", address, value);
+    mem_trace(INVALID_WRITE, address, size, value);
+
     if (mem_bus_error_enabled) {
         m68k_pulse_bus_error();
         m68k_end_timeslice();
-    }
-    fprintf(stderr, "bad write 0x%x<-0x%x: pte %svalid, %s, id %d\n", 
-            address,
-            value,
-            pte.valid ? "" : "in",
-            pte.device ? "dev" : "mem",
-            pte.id);
-    mem_trace(INVALID_WRITE, address, size, value);
-}
-
-static bool
-mem_range_is_free(uint32_t base, uint32_t size)
-{
-    uint32_t base_page = base / MEM_PAGE_SIZE;
-    uint32_t limit_page = (base + size) / MEM_PAGE_SIZE;
-    for (uint32_t page_index = base_page; page_index < limit_page; page_index++) {
-        if (mem_pagetable[page_index].valid) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static bool
-mem_range_can_be_device(uint32_t base, uint32_t size)
-{
-    uint32_t base_page = base / MEM_PAGE_SIZE;
-    uint32_t limit_page = (base + size) / MEM_PAGE_SIZE;
-    for (uint32_t page_index = base_page; page_index < limit_page; page_index++) {
-        if (mem_pagetable[page_index].valid && !mem_pagetable[page_index].device) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static void
-mem_set_range(uint32_t base, uint32_t size, pte_t entry)
-{
-    uint32_t base_page = base / MEM_PAGE_SIZE;
-    uint32_t limit_page = (base / MEM_PAGE_SIZE) + (size / MEM_PAGE_SIZE);
-    for (uint32_t page_index = base_page; page_index < limit_page; page_index++) {
-        mem_pagetable[page_index] = entry;
     }
 }
 
@@ -257,37 +213,33 @@ mem_set_range(uint32_t base, uint32_t size, pte_t entry)
 bool
 mem_add_memory(uint32_t base, uint32_t size, bool writable)
 {
-    // base & size must be aligned
-    if ((base % MEM_PAGE_SIZE)
-        || (size % MEM_PAGE_SIZE)) {
-        return false;
-    }
-
-    // get a buffer ID - fail if none available
-    int buffer_id;
-    for (buffer_id = 0; buffer_id < MEM_NUM_IDS; buffer_id++) {
-        if (!mem_buffers[buffer_id].buf) {
-            break;
-        }
-    }
-    if (buffer_id >= MEM_NUM_IDS) {
-        return false;
-    }
-
-    // check that pages aren't already in use
+    debug("adding 0x%x/0x%x%s", base, size, writable ? " writable" : "");
+    // check for overlap with existing ranges
     if (!mem_range_is_free(base, size)) {
         return false;
     }
 
-    // allocate buffer
-    mem_buffer_t *bp = mem_buffers + buffer_id;
-    bp->buf = calloc(size, 1);
-    bp->base = base;
-    bp->size = size;
-    bp->writable = writable;
+    // find a free buffer slot
+    mem_buffer_t *mb = NULL;
+    for (unsigned i = 0; i < MEM_MAX_BUFFERS; i++) {
+        if (mem_buffers[i].buf == NULL) {
+            if (i >= mem_num_buffers) {
+                mem_num_buffers = i + 1;
+            }
+            mb = &mem_buffers[i];
+            debug("alloc slot %d", i);
+            break;
+        }
+    }
+    if (mb == NULL) {
+        return false;
+    }
 
-    // write pagetable
-    mem_set_range(base, size, (pte_t){.valid = 1, .device = 0, .id = buffer_id });
+    // allocate a new buffer
+    mb->buf = calloc(size, 1);
+    mb->base = base;
+    mb->size = size;
+    mb->writable = writable;
 
     mem_trace(MEM_MAP, base, size, writable ? MEM_MAP_RAM : MEM_MAP_ROM);
     return true;
@@ -296,82 +248,36 @@ mem_add_memory(uint32_t base, uint32_t size, bool writable)
 bool
 mem_remove_memory(uint32_t base)
 {
-    // must be a buffer at this address
-    int buffer_id;
-    for (buffer_id = 0; buffer_id < MEM_NUM_IDS; buffer_id++) {
-        if (mem_buffers[buffer_id].base == base) {
-            break;
-        }
-    }
-    if (buffer_id >= MEM_NUM_IDS) {
+    // must be referencing the base of a range
+    mem_buffer_t *mb = mem_find(base);
+    if ((mb == NULL) || (base != mb->base)) {
         return false;
     }
 
-    // update pagetable
-    mem_buffer_t *bp = mem_buffers + buffer_id;
-    mem_set_range(bp->base, bp->size, (pte_t){.valid = 0});
-
-    mem_trace(MEM_UNMAP, bp->base, bp->size, 0);
-
-    // release buffer
-    free(bp->buf);
-    bp->buf = NULL;
+    mem_trace(MEM_UNMAP, mb->base, mb->size, 0);
+    free(mb->buf);
+    mb->buf = NULL;
     return true;
 }
 
 bool
-mem_move_memory(uint32_t src, uint32_t dst, uint32_t size)
+mem_move_memory(uint32_t src, uint32_t dst)
 {
-    // destination must be free
-    if (!mem_range_is_free(dst, size)) {
+    // src must be the base of a range
+    mem_buffer_t *mb = mem_find(src);
+    if ((mb == NULL) || (src != mb->base)) {
         return false;
     }
 
-    // src/size must cover a whole buffer
-    pte_t pte = mem_pagetable[src / MEM_PAGE_SIZE];
-    if (!pte.valid) {
-        return false;
-    }
-    uint8_t buffer_id = pte.id;
-    mem_buffer_t *bp = mem_buffers + buffer_id;
-    if ((bp->base != src) || (bp->size != size)) {
+    // entire destination must be free
+    if (!mem_range_is_free(dst, mb->size)) {
         return false;
     }
 
-    // unmap the old range
-    mem_set_range(src, size, (pte_t){.valid = 0});
+    // move it
+    mb->base = dst;
 
-    // move the buffer
-    bp->base = dst;
-
-    // map the new range
-    mem_set_range(dst, size, (pte_t){.valid = 1, .device= 0, .id = buffer_id});
-
-    return true;
-}
-
-bool
-mem_add_device(uint32_t base, uint32_t size)
-{
-    // must have a device handler
-    if (!mem_dev_handler) {
-        return false;
-    }
-
-    // base must be page-aligned
-    if (!IS_PAGE_ALIGNED(base)) {
-        return false;
-    }
-    size = PAGE_ROUND_UP(size);
-
-    // check that pages are available
-    if (!mem_range_can_be_device(base, size)) {
-        return false;
-    }
-
-    // write pagetable
-    mem_set_range(base, size, (pte_t){.valid = 1, .device = 1, .id = ~0});
-    mem_trace(MEM_MAP, base, size, MEM_MAP_DEVICE);
+    mem_trace(MEM_MOVE, src, mb->size, dst);
     return true;
 }
 
@@ -414,29 +320,26 @@ mem_enable_bus_error(bool enable)
 uint32_t
 mem_read_memory(uint32_t address, uint32_t size)
 {
-    pte_t   pte = mem_pagetable[address / MEM_PAGE_SIZE];
+    mem_buffer_t *mb = mem_find(address);
 
-    if (pte.valid &&
-        !pte.device) {
-        mem_buffer_t *bp = mem_buffers + pte.id;
-        if (bp->buf) {
-            uint32_t offset = address - bp->base;
-            if ((offset + (size / 8)) <= bp->size) {
-                uint8_t *dp = bp->buf + offset;
-                uint32_t ret = 0;
-                switch (size) {
-                case MEM_SIZE_32:
-                    ret = *dp++;
-                    ret = (ret << 8) + *dp++;
-                    // FALLTHROUGH
-                case MEM_SIZE_16:
-                    ret = (ret << 8) + *dp++;
-                    // FALLTHROUGH
-                case MEM_SIZE_8:
-                    ret = (ret << 8) + *dp;
-                    return ret;
-                }
-            }
+    if (mb != NULL) {
+        uint32_t offset = (address - mb->base);
+
+        // do endian swizzle & size conversion        
+        uint8_t *mptr = mb->buf + offset;
+        uint32_t mem_ret = 0;
+        switch (size) {
+        case MEM_SIZE_32:
+            mem_ret = *mptr++;
+            mem_ret = (mem_ret << 8) + *mptr++;
+            // FALLTHROUGH
+        case MEM_SIZE_16:
+            mem_ret = (mem_ret << 8) + *mptr++;
+            // FALLTHROUGH
+        case MEM_SIZE_8:
+            mem_ret = (mem_ret << 8) + *mptr;
+            mem_trace(MEM_READ, address, size, mem_ret);
+            return mem_ret;
         }
     }
     debug("unhandled read at 0x%x/%u", address, size);
@@ -446,57 +349,41 @@ mem_read_memory(uint32_t address, uint32_t size)
 void
 mem_write_memory(uint32_t address, uint32_t size, uint32_t value)
 {
-    pte_t   pte = mem_pagetable[address / MEM_PAGE_SIZE];
+    mem_buffer_t *mb = mem_find(address);
 
-    if (pte.valid
-        && !pte.device) {
-        mem_buffer_t *bp = mem_buffers + pte.id;
-        if (bp->buf) {
-            uint32_t offset = address - bp->base;
-            if ((offset + (size / 8)) <= bp->size) {
-                uint8_t *dp = bp->buf + offset;
-                switch (size) {
-                case MEM_SIZE_32:
-                    *dp++ = (value >> 24) & 0xff;
-                    *dp++ = (value >> 16) & 0xff;
-                    // FALLTHROUGH
-                case MEM_SIZE_16:
-                    *dp++ = (value >> 8) & 0xff;
-                    // FALLTHROUGH
-                case MEM_SIZE_8:
-                    *dp = value & 0xff;
-                    return;
-                }
-            }
+    if (mb != NULL) {
+        uint32_t offset = (address - mb->base);
+
+        // do endian swizzle & size conversion        
+        uint8_t *mptr = mb->buf + offset;
+        mem_trace(MEM_WRITE, address, size, value);
+        switch (size) {
+        case MEM_SIZE_32:
+            *mptr++ = (value >> 24) & 0xff;
+            *mptr++ = (value >> 16) & 0xff;
+            // FALLTHROUGH
+        case MEM_SIZE_16:
+            *mptr++ = (value >> 8) & 0xff;
+            // FALLTHROUGH
+        case MEM_SIZE_8:
+            *mptr = value & 0xff;
+            return;
         }
     }
     debug("ignored write @ 0x%x, size %d value 0x%x", address, size, value);
 }
 
 void
-mem_write_bulk(uint32_t address, uint8_t *buffer, uint32_t size)
+mem_write_bulk(uint32_t address, const uint8_t *buffer, uint32_t size)
 {
-    // could make this faster...
-    while (size) {
-        pte_t       pte = mem_pagetable[address / MEM_PAGE_SIZE];
-        uint32_t    page_offset = address % MEM_PAGE_SIZE;
-        uint32_t    copy_size = MEM_PAGE_SIZE - page_offset;
+    mem_buffer_t *mb = mem_find(address);
+    if (mb != NULL) {
+        uint32_t offset = address - mb->base;
+        uint32_t space = mb->size - offset;
+        uint32_t count = (size <= space) ? size : space;
 
-        if (copy_size > size) {
-            copy_size = size;
-        }
-
-        if (pte.valid
-            && !pte.device) {
-            mem_buffer_t *bp = mem_buffers + pte.id;
-            if (bp->buf) {
-                uint32_t buffer_offset = address - bp->base;
-                memcpy(bp->buf + buffer_offset, buffer, copy_size);
-            }
-        }
-        address += copy_size;
-        buffer += copy_size;
-        size -= copy_size;
+        debug("loading %d bytes of %d requested to 0x%x", count, size, address);
+        memcpy(mb->buf + offset, buffer, count);
     }
 }
 

@@ -38,6 +38,7 @@ class Trace(object):
         m68k.INVALID_WRITE: 'BAD_WRITE',
         m68k.MEM_MAP: 'MAP',
         m68k.MEM_UNMAP: 'UNMAP',
+        m68k.MEM_MOVE: 'MOVE',
     }
 
     __global_tracer = None
@@ -152,6 +153,8 @@ class Trace(object):
                     raise RuntimeError(f'unexpected mapping type {value}')
             elif operation == m68k.MEM_UNMAP:
                 info = f'{size:#x}'
+            elif operation == m68k.MEM_MOVE:
+                info = f'->{value:x}'
             else:
                 if size == m68k.MEM_SIZE_8:
                     info = f'{value:#04x}'

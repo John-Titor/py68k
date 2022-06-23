@@ -22,16 +22,13 @@ def rom_flip(app, apcon):
     if a23 != p90_flipped:
         # move memory at 0 to temporary location
         m68k.mem_move_memory(src=0,
-                             dst=0x2000000,
-                             size=512 * 1024)
+                             dst=0x2000000)
         # move memory at 0x1000000 to 0
         m68k.mem_move_memory(src=0x1000000,
-                             dst=0x0000000,
-                             size=512 * 1024)
+                             dst=0x0000000)
         # move memory from temporary location to 0x1000000
         m68k.mem_move_memory(src=0x2000000,
-                             dst=0x1000000,
-                             size=512 * 1024)
+                             dst=0x1000000)
         p90_flipped = a23
 
 
