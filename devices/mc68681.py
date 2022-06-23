@@ -219,7 +219,10 @@ class MC68681(Device):
                              ('CSRB',   self._b.write_csr),
                              ('CRB',    self._b.write_cr),
                              ('TBB',    self._b.write_tb),
-                             ('IVR',    self._write_ivr)]
+                             ('IVR',    self._write_ivr),
+                             ('OPCR',   self._write_opcr),
+                             ('OPSET',  self._write_opset),
+                             ('OPCLR',  self._write_opclr)]
         }
         for access, regs in regs.items():
             for index, reg in enumerate(regs):
@@ -299,6 +302,15 @@ class MC68681(Device):
 
     def _write_ivr(self, value):
         self._ivr = value
+
+    def _write_opcr(self, value):
+        pass
+
+    def _write_opset(self, value):
+        pass
+
+    def _write_opclr(self, value):
+        pass
 
     def _write_acr(self, value):
         mode = value & self.MODE_MASK
