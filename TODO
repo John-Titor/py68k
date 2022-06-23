@@ -1,5 +1,4 @@
 Things to investigate / fix:
-  ✔ exceptions in callbacks should be suitably fatal, not ignored @high @done (22-06-21 21:45)
   ☐ symbolication for e.g. address zero is printing vector names
     ☐ MAP operations should not symbolicate
   
@@ -8,9 +7,8 @@ Features:
 Musashi:
   ☐ recursive bus errors should just be double bus faults @high
 Console:
-  ✔ Characters not making it to apps: ^S, ^Q, ^Z (suspends console), ^Y (suspends console) @done (22-06-21 19:43)
   ☐ Characters not making it to apps: ESC, cursor keys (timing?)
-  ☐ Consider using Textual to build a better console? (plus other stuff)
+  ☐ Consider using Textual to build a better console? (plus other stuff) @low
 Tracing:
   Needs a complete rethink
   ☐ trace message via NatFeat
@@ -51,7 +49,6 @@ P90MB:
     ☐ RC2014 boards
   ☐ UART: seem to be losing transmit-complete interrupts
     hard to reproduce
-  ✔ UART: reduce character delay for snappier user experience @done (22-06-21 19:44)
 
 Rosco M68k v2:
 
@@ -74,6 +71,10 @@ Documentation:
   ☐ update README.md
 
 Archive:
+ ✔ ^C^C^C not exiting console @high @done (22-06-22 18:49) @project(Console)
+ ✔ exceptions in callbacks should be suitably fatal, not ignored @high @done (22-06-21 21:45) @project(Things to investigate / fix)
+ ✔ UART: reduce character delay for snappier user experience @done (22-06-21 19:44) @project(P90MB)
+ ✔ Characters not making it to apps: ^S, ^Q, ^Z (suspends console), ^Y (suspends console) @done (22-06-21 19:43) @project(Console)
  ✘ I2C realtime clock device @cancelled (22-06-19 12:27) @project(Tiny68k)
   clock on the board is busted, not worth it
  ✔ fix console in/output paths to be bytes all the way through @done (22-06-19 12:25) @project(Things to investigate / fix)

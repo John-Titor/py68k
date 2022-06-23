@@ -48,7 +48,6 @@ class ConsoleServer():
         self._want_exit = False
 
     def run(self):
-        signal.signal(signal.SIGINT, self._keyboard_interrupt)
         curses.wrapper(self._run)
 
     def _run(self, win):
@@ -141,13 +140,15 @@ class ConsoleServer():
 
         input = self._win.getch()
         if input != -1:
+            if input == 3:
+                self._ctrl_c()
             if input in ConsoleServer.input_keymap:
                 for c in ConsoleServer.input_keymap[input]:
                     self._handle_input(ord(c))
             else:
                 self._handle_input(input)
 
-    def _keyboard_interrupt(self, signal=None, frame=None):
+    def _ctrl_c(self):
         now = time.time()
         interval = now - self._first_interrupt_time
 
