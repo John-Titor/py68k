@@ -13,6 +13,10 @@ def add_arguments(parser):
                         type=int,
                         default=64,
                         help='DRAM size; boards may have 16, 64 or 128M')
+    parser.add_argument('--cf-width',
+                        type=int,
+                        default=8,
+                        help='CompactFlash interface width, 8 or 16')
     CompactFlash.add_arguments(parser)
     MC68681.add_arguments(parser)
 
@@ -103,7 +107,7 @@ def configure(args):
     emu.add_device(args,
                    CompactFlash,
                    address=0xffffe000,
-                   register_arrangement='8-bit')
+                   register_arrangement='8-bit' if args.cf_width == 8 else '16-bit')
     emu.add_device(args,
                    CB030Remap,
                    address=0xffff8000)
