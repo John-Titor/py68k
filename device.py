@@ -38,7 +38,9 @@ class Device(object):
         self.address = options['address'] if 'address' in options else None
         self.interrupt = options['interrupt'] if 'interrupt' in options else None
         self.size = None
+
         self.debug = self.name in args.debug_device
+
         self._asserted_ipl = 0
 
     @classmethod
@@ -177,7 +179,7 @@ class Device(object):
         """
         arrange for cb_func to be called every cb_period cycles
         """
-        self.__add_callback(self, self.current_cycle + cp_period, cb_name, cb_func, cb_period)
+        self.__add_callback(self, self.current_cycle + cb_period, cb_name, cb_func, cb_period)
 
     def callback_cancel(self, cb_name):
         """
