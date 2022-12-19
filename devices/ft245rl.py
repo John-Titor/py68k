@@ -8,13 +8,13 @@ from musashi import m68k
 # @see https://www.bigmessowires.com/68-katy/
 ADDR_SERIN         = 0x078000
 ADDR_SEROUT        = 0x07A000
-ADDR_SERSTATUS_RDF = 0x07C000
+ADDR_SERSTATUS_RXF = 0x07C000
 ADDR_SERSTATUS_TXE = 0x07D000
 ADDR_DOUT          = 0x07E000
 
 class FT245RL(Device):
 
-    SERSTATUS_RDF = 0b11111110 #  b0 is 0 when fifo ready to read
+    SERSTATUS_RXF = 0b11111110 #  b0 is 0 when fifo ready to read
     SERSTATUS_TXE = 0b11111110 #  b0 is 0 when fifo is empty
 
 
@@ -26,7 +26,7 @@ class FT245RL(Device):
 
         self.add_registers([ 
             ('SERIN',         0x00,                              m68k.MEM_SIZE_8, m68k.MEM_READ, self._read_serin),
-            ('SERSTATUS_RDF', (ADDR_SERSTATUS_RDF - ADDR_SERIN), m68k.MEM_SIZE_8, m68k.MEM_READ, self._read_sr_rdf),
+            ('SERSTATUS_RXF', (ADDR_SERSTATUS_RXF - ADDR_SERIN), m68k.MEM_SIZE_8, m68k.MEM_READ, self._read_sr_rxf),
             ('SERSTATUS_TXE', (ADDR_SERSTATUS_TXE - ADDR_SERIN), m68k.MEM_SIZE_8, m68k.MEM_READ, self._read_sr_txe),
 
             ('SEROUT',        (ADDR_SEROUT - ADDR_SERIN),        m68k.MEM_SIZE_8, m68k.MEM_WRITE, self._write_serout),
@@ -41,10 +41,10 @@ class FT245RL(Device):
         self._rxfifo = deque()
         self._vr = 0
 
-    def _read_sr_rdf(self):
+    def _read_sr_rxf(self):
         value = 0b11111111
         if len(self._rxfifo) > 0:
-            value = FT245RL.SERSTATUS_RDF
+            value = FT245RL.SERSTATUS_RXF
         return value
 
     def _read_sr_txe(self):

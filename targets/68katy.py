@@ -1,6 +1,6 @@
 from emulator import Emulator
-from device import Device
 #from devices.compactflash import CompactFlash
+from devices.ne555 import NE555Ticker
 from devices.ft245rl import FT245RL
 from musashi import m68k
 
@@ -17,7 +17,7 @@ rom_base = 0
 rom_size = 0x077FFF + 1 # 512 * 1024 but not all the flash is decoded
 
 ram_base = 0x080000
-ram_size = 0x0FFFFF - 0x080000 + 1 # 512 * 1024
+ram_size = 1024 * 512 # 0x0FFFFF - 0x080000 + 1 # 512 * 1024
 
 io_base  = 0x078000 
 
@@ -27,54 +27,9 @@ def add_arguments(parser):
                         type=str,
                         help='ROM image')
     #CompactFlash.add_arguments(parser)
+
+    NE555Ticker.add_arguments(parser)
     FT245RL.add_arguments(parser)
-
-
-class Katy68Ticker(Device):
-    def __init__(self, args, **options):
-        super().__init__(args=args,
-                         name='Katy68Ticker',
-                         required_options=['interrupt'],
-                         **options)
-
-        # no registers, 
-        # self.size = 0x0
-        # core clock @ 24MHz, 100Hz tick rate
-        self._tick_cycles = int(self.emu.cycle_rate / 100)
-        self.reset()
-        self._start()
-        self.trace(info='init done')
-
-    def reset(self):
-        self._vr = 0
-        self._stop()
-        self._tick_fired = False
-
-        self._start()
-
-    def _stop(self):
-        self.trace(info=f'ticker stoped')
-        self.callback_cancel('tick')
-        self._ticker_on = False
-
-    def _start(self):
-        if not self._ticker_on:
-            self.trace(info=f'ticker started every {self._tick_cycles}')
-            self.callback_every(self._tick_cycles, 'tick', self._tick)
-            self._ticker_on = True
-
-    def _tick(self):
-        if self._ticker_on:
-            self._tick_fired = True
-            self.assert_ipl()
-
-    def get_vector(self):
-        if self._tick_fired:
-            self._tick_fired = False
-            if self._vr > 0:
-                return self._vr
-            return mk68.IRQ_AUTOVECTOR
-        return m68k.IRQ_SPURIOUS
 
 
 def configure(args):
@@ -87,7 +42,7 @@ def configure(args):
     emu.add_memory(base=rom_base, size=rom_size, writable=False, from_file=args.rom)
     emu.add_memory(base=ram_base, size=ram_size)
     emu.add_device(args,
-                   Katy68Ticker,
+                   NE555Ticker,
                    interrupt=m68k.IRQ_5)
     emu.add_device(args,
                    FT245RL,
