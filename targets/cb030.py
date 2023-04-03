@@ -11,7 +11,7 @@ def add_arguments(parser):
                         help='ROM image')
     parser.add_argument('--dram-size',
                         type=int,
-                        default=64,
+                        default=16,
                         help='DRAM size; boards may have 16, 64 or 128M')
     parser.add_argument('--cf-width',
                         type=int,
