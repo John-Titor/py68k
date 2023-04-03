@@ -177,7 +177,7 @@ class Device(object):
         """
         arrange for cb_func to be called every cb_period cycles
         """
-        self.__add_callback(self, self.current_cycle + cp_period, cb_name, cb_func, cb_period)
+        self.__add_callback(self, self.current_cycle + cb_period, cb_name, cb_func, cb_period)
 
     def callback_cancel(self, cb_name):
         """
