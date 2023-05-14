@@ -62,3 +62,19 @@ emulation.
 ## Requirements
 
 Python, with vt102, pyelftools and hexdump modules installed.
+
+
+### 68Katy
+Steve Chamberlin's 68Katy is a board wit 512k of RAM and 512k of flash,
+a serial FT245RL console.
+
+https://www.bigmessowires.com/68-katy/  
+
+Fetch the zBug monitor or zBug+uClinux image and run:
+
+`./py68k.py --target 68katy  --rom  ../68katy/monitor-plus-linux-pcb.bin`
+
+* zBug seems to work 
+* uClinux failed to boot for now : Need to fix the ticker's device andi/or interrupt handling.
+
+ 

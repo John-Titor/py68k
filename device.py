@@ -38,7 +38,9 @@ class Device(object):
         self.address = options['address'] if 'address' in options else None
         self.interrupt = options['interrupt'] if 'interrupt' in options else None
         self.size = None
+
         self.debug = self.name in args.debug_device
+
         self._asserted_ipl = 0
 
     @classmethod
